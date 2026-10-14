@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drainage Monitor</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1b2430; --muted: #5d6877; --line: #dde1e7;
+    --n1: #2a6fdb; --n2: #d9680a;
+    --ok: #17803d; --ok-bg: #e3f4e9; --warn: #9a6200; --warn-bg: #fdf0d5; --bad: #b42318; --bad-bg: #fde4e1;
+    --btn: #1b2430; --btn-text: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --card: #1b212a; --text: #e7ebf0; --muted: #9aa5b4; --line: #2c3541;
+      --n1: #6aa3ff; --n2: #ff9a4d;
+      --ok: #5fd08a; --ok-bg: #16301f; --warn: #f0b955; --warn-bg: #362a10; --bad: #ff8b7d; --bad-bg: #3a1a17;
+      --btn: #e7ebf0; --btn-text: #12161c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .nodehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .nodename { font-weight: 650; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .pill { font-size: 12px; font-weight: 650; padding: 3px 10px; border-radius: 999px; letter-spacing: .03em; }
+  .pill.ONLINE { background: var(--ok-bg); color: var(--ok); }
+  .pill.STALE { background: var(--warn-bg); color: var(--warn); }
+  .pill.OFFLINE, .pill.NODATA { background: var(--bad-bg); color: var(--bad); }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 520px) { .tiles { grid-template-columns: 1fr 1fr; } }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .tile .k { font-size: 12px; color: var(--muted); }
+  .tile .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .tile .u { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .meta { margin-top: 10px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .badge { display: inline-block; font-weight: 650; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--text); }
+  .warn { margin-top: 8px; font-size: 13px; color: var(--warn); background: var(--warn-bg); padding: 6px 10px; border-radius: 6px; }
+  .panel { margin-bottom: 14px; }
+  .panel h2 { font-size: 15px; margin: 0 0 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  label.f { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 3px; }
+  select, input { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line);
+                  border-radius: 7px; padding: 7px 9px; min-height: 36px; }
+  input[type=number] { width: 90px; }
+  button { font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid var(--line); background: var(--card);
+           color: var(--text); padding: 7px 14px; min-height: 36px; }
+  button.primary { background: var(--btn); color: var(--btn-text); border-color: var(--btn); font-weight: 600; }
+  button.on { background: var(--btn); color: var(--btn-text); border-color: var(--btn); }
+  .msg { font-size: 13px; min-height: 18px; margin-top: 8px; }
+  .msg.ok { color: var(--ok); } .msg.err { color: var(--bad); }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 760px) { .charts { grid-template-columns: 1fr; } }
+  .chartbox h3 { font-size: 14px; margin: 0 0 2px; }
+  .chartbox .hint { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .chartbox canvas { width: 100% !important; height: 220px !important; }
+  .legend { display: flex; gap: 14px; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Drainage Monitor</h1>
+      <div class="sub">Live from PostgreSQL &middot; <span id="updated">connecting&hellip;</span></div>
+    </div>
+    <div class="row" id="ranges" role="group" aria-label="Chart time range">
+      <button data-min="5">5 min</button>
+      <button data-min="15" class="on">15 min</button>
+      <button data-min="60">1 hour</button>
+      <button data-min="360">6 hours</button>
+    </div>
+  </header>
+
+  <div class="grid2" id="cards"></div>
+
+  <section class="card panel">
+    <h2>Label new data</h2>
+    <div class="row">
+      <label class="f">Apply to
+        <select id="lblNode"><option value="both">Both nodes</option><option value="1">Node 1</option><option value="2">Node 2</option></select>
+      </label>
+      <label class="f">Label
+        <select id="lblLabel"><option>Normal</option><option>Blockage</option><option>Flood</option></select>
+      </label>
+      <label class="f">Trial ID
+        <input id="lblTrial" value="baseline_001" maxlength="40" size="18">
+      </label>
+      <button class="primary" id="lblApply">Apply to new readings</button>
+    </div>
+    <div class="msg" id="lblMsg"></div>
+    <div class="sub" style="margin-top:4px">Readings arriving from now on are stored with this label and trial ID. The ESP32s do not need to be touched.</div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+    <div class="row">
+      <label class="f">Fix the last
+        <input type="number" id="rlMin" min="1" max="720" value="5"> 
+      </label>
+      <span class="sub" style="padding-bottom:9px">minutes of stored data (uses the node, label and trial above)</span>
+      <button id="rlApply">Relabel stored data</button>
+    </div>
+    <div class="msg" id="rlMsg"></div>
+  </section>
+
+  <div class="charts" id="charts"></div>
+
+  <section class="card panel">
+    <h2>Latest readings</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Node</th><th>Age</th><th>Distance (cm)</th><th>Flow (L/min)</th><th>MQ-4 (V)</th><th>MQ-135 (V)</th><th>Label</th><th>Trial</th></tr></thead>
+        <tbody id="recent"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script>
+const COLORS = { "1": "--n1", "2": "--n2" };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let minutes = 15;
+const charts = {};
+
+const METRICS = [
+  { key: "water", title: "Distance to water surface", unit: "cm", hint: "Probe to surface. Smaller means higher water. Gaps = no echo." },
+  { key: "flow",  title: "Flow rate", unit: "L/min", hint: "Pulses counted by the ZJ-S201 sensor." },
+  { key: "mq4",   title: "MQ-4 (methane) output", unit: "V", hint: "Raw sensor voltage after the divider." },
+  { key: "mq135", title: "MQ-135 output", unit: "V", hint: "Node 1 only. Node 2 has no MQ-135." },
+];
+
+function fmtAge(s) {
+  if (s == null) return "never";
+  if (s < 90) return Math.round(s) + " s ago";
+  if (s < 5400) return Math.round(s / 60) + " min ago";
+  return (s / 3600).toFixed(1) + " h ago";
+}
+const f = (v, d) => v == null ? "–" : v.toFixed(d);
+
+function buildCards() {
+  const el = document.getElementById("cards");
+  el.innerHTML = ["1", "2"].map(n => `
+    <section class="card" id="card${n}">
+      <div class="nodehead">
+        <div class="nodename"><span class="dot" style="background:var(${COLORS[n]})"></span>Node ${n}</div>
+        <span class="pill NODATA" id="pill${n}">NO DATA</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Distance</div><div class="v" id="w${n}">–</div><div class="u">cm</div></div>
+        <div class="tile"><div class="k">Flow</div><div class="v" id="fl${n}">–</div><div class="u">L/min</div></div>
+        <div class="tile"><div class="k">MQ-4</div><div class="v" id="m4${n}">–</div><div class="u">V</div></div>
+        <div class="tile"><div class="k">MQ-135</div><div class="v" id="m135${n}">–</div><div class="u">V</div></div>
+      </div>
+      <div class="meta">
+        <span>Last seen: <b id="age${n}">never</b></span>
+        <span>Stamping new data as: <span class="badge" id="set${n}">–</span></span>
+        <span>Rows stored: <b id="tot${n}">0</b></span>
+      </div>
+      <div class="warn" id="warn${n}" hidden></div>
+    </section>`).join("");
+}
+
+function buildCharts() {
+  const el = document.getElementById("charts");
+  el.innerHTML = METRICS.map(m => `
+    <section class="card chartbox">
+      <h3>${m.title} (${m.unit})</h3>
+      <div class="hint">${m.hint}</div>
+      <canvas id="c_${m.key}"></canvas>
+    </section>`).join("");
+  METRICS.forEach(m => {
+    charts[m.key] = new Chart(document.getElementById("c_" + m.key), {
+      type: "line",
+      data: { datasets: ["1", "2"].map(n => ({
+        label: "Node " + n, data: [], borderColor: css(COLORS[n]), backgroundColor: css(COLORS[n]),
+        borderWidth: 2, pointRadius: 2, pointHoverRadius: 4, tension: 0.15, spanGaps: false,
+      })) },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false, parsing: false,
+        interaction: { mode: "nearest", intersect: false, axis: "x" },
+        plugins: { legend: { labels: { color: css("--text"), usePointStyle: true, boxWidth: 8 } },
+                   tooltip: { callbacks: { title: i => new Date(i[0].parsed.x).toLocaleTimeString() } } },
+        scales: {
+          x: { type: "linear", ticks: { color: css("--muted"), maxTicksLimit: 6,
+                 callback: v => new Date(v).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) },
+               grid: { color: css("--line") } },
+          y: { ticks: { color: css("--muted") }, grid: { color: css("--line") }, title: { display: true, text: m.unit, color: css("--muted") } },
+        },
+      },
+    });
+  });
+}
+
+async function getJSON(url, opts) {
+  const r = await fetch(url, opts);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || r.statusText);
+  return body;
+}
+
+async function refreshStatus() {
+  const s = await getJSON("/api/status");
+  for (const n of ["1", "2"]) {
+    const d = s[n];
+    const pill = document.getElementById("pill" + n);
+    pill.textContent = d.state;
+    pill.className = "pill " + d.state.replace(" ", "");
+    document.getElementById("age" + n).textContent = fmtAge(d.age_s);
+    document.getElementById("tot" + n).textContent = d.total_rows;
+    document.getElementById("set" + n).textContent = d.set_label + " / " + d.set_trial;
+    const L = d.latest;
+    document.getElementById("w" + n).textContent = f(L && L.water_level_cm, 1);
+    document.getElementById("fl" + n).textContent = f(L && L.flow_rate_lpm, 2);
+    document.getElementById("m4" + n).textContent = f(L && L.mq4_voltage, 3);
+    document.getElementById("m135" + n).textContent = f(L && L.mq135_voltage, 3);
+    const warns = [];
+    if (d.state === "STALE") warns.push("No new reading for over " + 25 + " s. Check power and the hotspot.");
+    if (d.state === "OFFLINE") warns.push("Node has stopped sending. Check power, the hotspot, Mosquitto and the ingestion script.");
+    if (d.state === "NO DATA") warns.push("No readings stored for this node yet.");
+    if (d.rows_10min > 0 && d.no_echo_10min / d.rows_10min > 0.3)
+      warns.push("Ultrasonic sensor returned no echo in " + d.no_echo_10min + " of the last " + d.rows_10min + " readings.");
+    const w = document.getElementById("warn" + n);
+    w.hidden = warns.length === 0;
+    w.textContent = warns.join(" ");
+  }
+}
+
+async function refreshSeries() {
+  const s = await getJSON("/api/series?minutes=" + minutes);
+  const now = Date.now();
+  const xmin = now - minutes * 60000;
+  METRICS.forEach(m => {
+    const ch = charts[m.key];
+    ["1", "2"].forEach((n, i) => {
+      ch.data.datasets[i].data = (s[n] || []).map(p => ({ x: now - p.age_s * 1000, y: p[m.key] }));
+    });
+    ch.options.scales.x.min = xmin;
+    ch.options.scales.x.max = now;
+    ch.update("none");
+  });
+}
+
+async function refreshRecent() {
+  const rows = await getJSON("/api/recent");
+  document.getElementById("recent").innerHTML = rows.map(r => `<tr>
+    <td>${r.node_id}</td><td>${fmtAge(r.age_s)}</td>
+    <td>${r.water_level_cm < 0 ? "no echo" : f(r.water_level_cm, 1)}</td>
+    <td>${f(r.flow_rate_lpm, 2)}</td><td>${f(r.mq4_voltage, 3)}</td>
+    <td>${r.mq135_voltage < 0 ? "–" : f(r.mq135_voltage, 3)}</td>
+    <td>${r.label}</td><td>${r.trial_id}</td></tr>`).join("");
+}
+
+async function tick() {
+  try {
+    await Promise.all([refreshStatus(), refreshSeries(), refreshRecent()]);
+    document.getElementById("updated").textContent = "updated " + new Date().toLocaleTimeString();
+  } catch (e) {
+    document.getElementById("updated").textContent = "cannot reach the dashboard server (" + e.message + ")";
+  }
+}
+
+function flash(id, text, ok) {
+  const el = document.getElementById(id);
+  el.textContent = text; el.className = "msg " + (ok ? "ok" : "err");
+}
+function labelBody() {
+  return { node_id: document.getElementById("lblNode").value, label: document.getElementById("lblLabel").value,
+           trial_id: document.getElementById("lblTrial").value.trim() };
+}
+const post = (url, body) => getJSON(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+document.getElementById("lblApply").onclick = async () => {
+  try { await post("/api/label", labelBody());
+        const b = labelBody(); flash("lblMsg", "New readings from " + (b.node_id === "both" ? "both nodes" : "node " + b.node_id) + " will be stored as " + b.label + " / " + b.trial_id + ".", true); tick(); }
+  catch (e) { flash("lblMsg", e.message, false); }
+};
+document.getElementById("rlApply").onclick = async () => {
+  const b = labelBody(); b.minutes = document.getElementById("rlMin").value;
+  if (!confirm("Relabel the last " + b.minutes + " min of stored data for " + (b.node_id === "both" ? "both nodes" : "node " + b.node_id) + " as " + b.label + " / " + b.trial_id + "?")) return;
+  try { const r = await post("/api/relabel", b); flash("rlMsg", r.rows_changed + " stored readings relabelled.", true); tick(); }
+  catch (e) { flash("rlMsg", e.message, false); }
+};
+document.querySelectorAll("#ranges button").forEach(btn => btn.onclick = () => {
+  minutes = +btn.dataset.min;
+  document.querySelectorAll("#ranges button").forEach(b => b.classList.toggle("on", b === btn));
+  refreshSeries();
+});
+
+buildCards(); buildCharts(); tick(); setInterval(tick, 3000);
+</script>
+</body>
+</html>
