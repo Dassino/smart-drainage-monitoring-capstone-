@@ -16,10 +16,9 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include "secrets.h"
 
 // ---------- CONFIG: EDIT THESE ----------
-const char* WIFI_SSID     = "KILL_STARIO";
-const char* WIFI_PASSWORD = "12345678";
 const char* MQTT_BROKER   = "192.168.137.1";   // the laptop's address on the Windows hotspot
 const int   MQTT_PORT     = 1883;
 const char* MQTT_TOPIC    = "drainage/node2/readings";
