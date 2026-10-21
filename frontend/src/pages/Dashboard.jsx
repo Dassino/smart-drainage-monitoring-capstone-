@@ -21,6 +21,16 @@ function fmtAge(s) {
 
 const fmt = (v, d = 1) => (v == null ? '—' : Number(v).toFixed(d))
 
+const DETECTOR = {
+  alert: ['crit', 'Alert'],
+  anomalous: ['stale', 'Unusual reading'],
+  normal: ['ok', 'Normal'],
+  warming_up: ['off', 'Warming up'],
+  no_live_data: ['off', 'No live data'],
+  no_data: ['off', 'No data'],
+  error: ['crit', 'Detector error'],
+}
+
 function Reading({ k, v, u }) {
   return (
     <div className="reading">
@@ -62,6 +72,7 @@ function NodeCard({ id, s }) {
 
 export default function Dashboard() {
   const { data: status, error } = usePolling('/api/status', 3000)
+  const { data: anomaly } = usePolling('/api/anomaly', 3000)
   const [metric, setMetric] = useState('water')
   const [minutes, setMinutes] = useState(15)
 
@@ -117,9 +128,29 @@ export default function Dashboard() {
           <div className="card-head">
             <h2>Active Alerts</h2>
           </div>
-          <div className="card-body">
-            <p className="empty">
-              No alerts yet. Alerts will appear here once the anomaly detector is connected to the live data.
+            <div className="card-body">
+            <ul className="detector">
+              {NODES.map((n) => {
+                const a = anomaly?.[n]
+                const [cls, text] = DETECTOR[a?.status] ?? ['off', '—']
+                return (
+                  <li key={n}>
+                    <div className="line">
+                      <span>Node {n}</span>
+                      <span className={`badge ${cls}`}>{text}</span>
+                    </div>
+                    {a?.score != null && (
+                      <span className="muted small">
+                        score {fmt(a.score, 3)} · threshold {fmt(a.threshold, 3)} · {a.streak} flagged in a row
+                      </span>
+                    )}
+                    {a?.status === 'error' && <span className="muted small">{a.detail}</span>}
+                  </li>
+                )
+              })}
+            </ul>
+            <p className="muted small foot">
+              Isolation Forest, one model per node. An alert needs {anomaly?.['1']?.persist ?? 6} flagged readings in a row.
             </p>
           </div>
         </div>

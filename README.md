@@ -41,3 +41,27 @@ Random Forest and LSTM need the Blockage and Flood trials, which are in progress
 
 ## Status
 See Issues and Milestones.
+
+## Run the dashboard
+
+Needs PostgreSQL and Mosquitto running, and the sensor nodes powered.
+
+```
+py -m pip install flask psycopg2-binary pandas numpy joblib scikit-learn==1.6.1
+set DB_PASSWORD=your_password
+py backend/mqtt_to_postgres.py
+py backend/dashboard/app.py
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. The anomaly flag (`/api/anomaly`) uses `ml/score.py` and the
+saved Isolation Forest models in `ml/models/`. scikit-learn must be 1.6.1, the version the
+models were saved with. `py ml/score.py data/sensor_readings_export.csv` checks that the
+scorer reproduces the notebook.
+
+## Future work
+
+- Dashboard visual design: revisit colour palette, typography and sidebar styling
+  (layout and content are fixed by the wireframes; styling is open to change).
