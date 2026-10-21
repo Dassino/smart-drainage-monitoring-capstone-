@@ -11,10 +11,15 @@ Open:    http://127.0.0.1:5000
 """
 import os
 import re
+import sys
+from pathlib import Path
 
 import psycopg2
 import psycopg2.extras
+import pandas as pd
 from flask import Flask, jsonify, request, send_from_directory
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ml"))
+import score  # noqa: E402
 
 DB_NAME = os.environ.get("DB_NAME", "drainage_monitoring")
 DB_USER = os.environ.get("DB_USER", "postgres")
@@ -140,6 +145,35 @@ def recent():
             rows.append({**r, "age_s": float(r["age_s"])})
     return jsonify(rows)
 
+@app.route("/api/anomaly")
+def anomaly():
+    """Isolation Forest status of each node, from the latest readings of its current trial."""
+    out = {}
+    with db() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        for n in NODES:
+            cur.execute("""
+                SELECT timestamp, trial_id, water_level_cm, flow_rate_lpm, mq4_voltage, mq135_voltage,
+                       EXTRACT(EPOCH FROM (NOW() - timestamp)) AS age_s
+                FROM sensor_readings
+                WHERE node_id::text = %s
+                  AND trial_id = (SELECT trial_id FROM sensor_readings
+                                  WHERE node_id::text = %s ORDER BY timestamp DESC LIMIT 1)
+                ORDER BY timestamp DESC LIMIT %s""", (n, n, score.FETCH_ROWS))
+            rows = cur.fetchall()
+            if not rows:
+                out[n] = {"status": "no_data"}
+                continue
+            try:
+                res = score.assess(int(n), pd.DataFrame(rows))
+            except Exception as e:      # keep the dashboard alive if scoring fails
+                res = {"status": "error", "detail": str(e)}
+            age = float(rows[0]["age_s"])
+            res["age_s"] = age
+            res["trial_id"] = rows[0]["trial_id"]
+            if age > STALE_S and res["status"] != "error":
+                res["status"] = "no_live_data"
+            out[n] = res
+    return jsonify(out)
 
 def parse_target(body):
     target = str(body.get("node_id", ""))
