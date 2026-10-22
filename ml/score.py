@@ -31,6 +31,7 @@ REQUIRED = ["water_level_cm", "flow_rate_lpm", "mq4_voltage"]
 
 FETCH_ROWS = 60   # latest readings of the current trial used for live scoring
 EXPECTED_ROWS = {1: 9785, 2: 9766}   # rows the notebook used to fit the final models
+WARMUP_ROWS = 12  # readings a trial needs before its first score (7-reading window + 5-reading median)
 PERSIST = 6       # consecutive flagged readings (about 50 s) before a reading becomes an alert.
                   # Provisional: to be tuned on the Blockage and Flood trials.
 
@@ -103,6 +104,33 @@ def assess(node, raw):
     )
     return out
 
+def detail(node, raw, top=5):
+    """assess() plus the score history and the features furthest from Normal on the latest reading.
+
+    The feature ranking is each feature's distance from the Normal average in standard deviations
+    (the scaler fitted on the training data). It is a guide to which signals look least normal,
+    not an exact explanation of the Isolation Forest's decision.
+    """
+    out = assess(node, raw)
+    m = load(node)
+    d, feats = make_features(clean(raw), SENSORS[int(node)], m["window"])
+    out.update(series=[], features=[])
+    if d.empty:
+        return out
+    X = d[feats]
+    d = d.assign(score=-m["model"].score_samples(m["scaler"].transform(X)))
+    d["flag"] = d["score"] > m["thr"]
+    ages = d["age_s"] if "age_s" in d else pd.Series(np.nan, index=d.index)
+    out["series"] = [
+        {"age_s": None if pd.isna(a) else float(a), "score": float(s), "flag": bool(f)}
+        for a, s, f in zip(ages, d["score"], d["flag"])
+    ]
+    last = X.iloc[-1].to_numpy()
+    z = (last - m["scaler"].mean_) / m["scaler"].scale_
+    for i in np.argsort(-np.abs(z))[:top]:
+        out["features"].append({"name": feats[i], "value": float(last[i]),
+                                "normal": float(m["scaler"].mean_[i]), "z": float(z[i])})
+    return out
 
 def check(csv_path):
     """The final models were fitted on every Normal row, so the flag rate on that same data

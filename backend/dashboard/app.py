@@ -145,21 +145,26 @@ def recent():
             rows.append({**r, "age_s": float(r["age_s"])})
     return jsonify(rows)
 
+def latest_trial_rows(cur, node, limit):
+    """Newest `limit` readings of the trial the node is currently in, newest first."""
+    cur.execute("""
+        SELECT timestamp, trial_id, water_level_cm, flow_rate_lpm, mq4_voltage, mq135_voltage,
+               EXTRACT(EPOCH FROM (NOW() - timestamp)) AS age_s
+        FROM sensor_readings
+        WHERE node_id::text = %s
+          AND trial_id = (SELECT trial_id FROM sensor_readings
+                          WHERE node_id::text = %s ORDER BY timestamp DESC LIMIT 1)
+        ORDER BY timestamp DESC LIMIT %s""", (node, node, limit))
+    return cur.fetchall()
+
+
 @app.route("/api/anomaly")
 def anomaly():
     """Isolation Forest status of each node, from the latest readings of its current trial."""
     out = {}
     with db() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         for n in NODES:
-            cur.execute("""
-                SELECT timestamp, trial_id, water_level_cm, flow_rate_lpm, mq4_voltage, mq135_voltage,
-                       EXTRACT(EPOCH FROM (NOW() - timestamp)) AS age_s
-                FROM sensor_readings
-                WHERE node_id::text = %s
-                  AND trial_id = (SELECT trial_id FROM sensor_readings
-                                  WHERE node_id::text = %s ORDER BY timestamp DESC LIMIT 1)
-                ORDER BY timestamp DESC LIMIT %s""", (n, n, score.FETCH_ROWS))
-            rows = cur.fetchall()
+            rows = latest_trial_rows(cur, n, score.FETCH_ROWS)
             if not rows:
                 out[n] = {"status": "no_data"}
                 continue
@@ -174,6 +179,33 @@ def anomaly():
                 res["status"] = "no_live_data"
             out[n] = res
     return jsonify(out)
+
+
+@app.route("/api/anomaly/detail")
+def anomaly_detail():
+    """Score history and the most unusual features of one node (Alert Detail screen)."""
+    node = request.args.get("node", "1")
+    if node not in NODES:
+        return jsonify({"error": "node must be 1 or 2"}), 400
+    try:
+        minutes = max(5, min(int(request.args.get("minutes", 15)), 180))
+    except ValueError:
+        return jsonify({"error": "minutes must be a whole number"}), 400
+    limit = int(minutes * 60 / 8) + score.WARMUP_ROWS
+    with db() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        rows = latest_trial_rows(cur, node, limit)
+    if not rows:
+        return jsonify({"status": "no_data", "series": [], "features": []})
+    try:
+        res = score.detail(int(node), pd.DataFrame(rows))
+    except Exception as e:
+        return jsonify({"status": "error", "detail": str(e), "series": [], "features": []})
+    res["series"] = [p for p in res["series"] if p["age_s"] is None or p["age_s"] <= minutes * 60]
+    res["age_s"] = float(rows[0]["age_s"])
+    res["trial_id"] = rows[0]["trial_id"]
+    if res["age_s"] > STALE_S and res["status"] != "error":
+        res["status"] = "no_live_data"
+    return jsonify(res)
 
 def parse_target(body):
     target = str(body.get("node_id", ""))
