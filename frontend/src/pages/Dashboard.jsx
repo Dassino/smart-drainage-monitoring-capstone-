@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { usePolling } from '../api'
 import TrendChart from '../components/TrendChart'
 
@@ -127,6 +128,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-head">
             <h2>Active Alerts</h2>
+            <Link to="/alerts" className="more">Details</Link>
           </div>
             <div className="card-body">
             <ul className="detector">

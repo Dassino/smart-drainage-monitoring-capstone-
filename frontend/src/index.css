@@ -92,6 +92,21 @@ h1, h2, h3, p { margin: 0; }
 .detector li { display: grid; gap: 4px; }
 .detector .line { display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
 
+/* alert detail */
+.bar { margin-top: 16px; }
+.pair { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 16px; align-items: start; }
+.pair .node { background: var(--card); padding: 18px; }
+.detail-block { margin-top: 16px; }
+.detail-block h4 { margin: 0 0 8px; font-size: 14px; }
+.chart-box.short { height: 220px; }
+.ftable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ftable th, .ftable td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); }
+.ftable th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.ftable .num { text-align: right; white-space: nowrap; }
+.note { margin-top: 16px; max-width: 760px; line-height: 1.5; }
+.more { font-size: 13px; font-weight: 600; color: var(--navy); text-decoration: none; }
+.more:hover { text-decoration: underline; }
+
 /* chart controls */
 .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -109,5 +124,5 @@ select { font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid va
   .sidebar { position: static; height: auto; }
   .nav { flex-direction: row; flex-wrap: wrap; }
   .main { padding: 20px 16px 40px; }
-  .tiles, .split, .nodes { grid-template-columns: 1fr; }
+  .tiles, .split, .nodes, .pair { grid-template-columns: 1fr; }
 }
