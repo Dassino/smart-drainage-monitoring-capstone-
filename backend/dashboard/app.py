@@ -10,6 +10,8 @@ Run:     set DB_PASSWORD=your_password        (PowerShell:  $env:DB_PASSWORD="yo
 Open:    http://127.0.0.1:5000
 """
 import os
+import csv
+import io
 import re
 import sys
 from pathlib import Path
@@ -17,7 +19,7 @@ from pathlib import Path
 import psycopg2
 import psycopg2.extras
 import pandas as pd
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ml"))
 import score  # noqa: E402
 
@@ -32,6 +34,7 @@ LABELS = ["Normal", "Blockage", "Flood"]
 ONLINE_S = 25      # readings arrive every ~10 s
 STALE_S = 60
 TRIAL_RE = re.compile(r"^[A-Za-z0-9_\-]{1,40}$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
@@ -206,6 +209,123 @@ def anomaly_detail():
     if res["age_s"] > STALE_S and res["status"] != "error":
         res["status"] = "no_live_data"
     return jsonify(res)
+
+@app.route("/api/trials")
+def trials():
+    """Every recorded trial (per node) with its label, size and time span."""
+    with db() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT node_id::text AS node, trial_id,
+                   string_agg(DISTINCT label, ', ') AS label,
+                   COUNT(*) AS rows, MIN(timestamp) AS started, MAX(timestamp) AS ended
+            FROM sensor_readings
+            GROUP BY node_id, trial_id
+            ORDER BY MAX(timestamp) DESC""")
+        out = []
+        for r in cur.fetchall():
+            out.append({"node": r["node"], "trial_id": r["trial_id"], "label": r["label"],
+                        "rows": r["rows"], "started": r["started"].isoformat(),
+                        "ended": r["ended"].isoformat(),
+                        "duration_s": (r["ended"] - r["started"]).total_seconds()})
+    return jsonify(out)
+
+
+@app.route("/api/trial")
+def trial_replay():
+    """All readings of one trial on one node, with the anomaly score of each scored reading."""
+    node = request.args.get("node", "")
+    trial = request.args.get("trial_id", "")
+    if node not in NODES or not TRIAL_RE.match(trial):
+        return jsonify({"error": "node must be 1 or 2 and trial_id must be valid"}), 400
+    with db() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("""
+            SELECT timestamp, trial_id, water_level_cm, flow_rate_lpm, mq4_voltage, mq135_voltage
+            FROM sensor_readings
+            WHERE node_id::text = %s AND trial_id = %s
+            ORDER BY timestamp LIMIT 30000""", (node, trial))
+        rows = cur.fetchall()
+    if not rows:
+        return jsonify({"error": "no readings for that trial"}), 404
+    df = pd.DataFrame(rows)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    t0 = df["timestamp"].iloc[0]
+    scored, detector_error = {}, None
+    try:
+        s = score.score_frame(int(node), df)
+        scored = {t: (sc, fl) for t, sc, fl in zip(s["timestamp"], s["score"], s["flag"])}
+    except Exception as e:
+        detector_error = str(e)
+    series, streak, first_alert_s = [], 0, None
+    for r in df.itertuples():
+        sc, fl = scored.get(r.timestamp, (None, None))
+        t_s = (r.timestamp - t0).total_seconds()
+        if fl is not None:
+            streak = streak + 1 if fl else 0
+            if streak >= score.PERSIST and first_alert_s is None:
+                first_alert_s = t_s
+        series.append({"t_s": t_s, "water": num(r.water_level_cm), "flow": num(r.flow_rate_lpm),
+                       "mq4": num(r.mq4_voltage), "mq135": num(r.mq135_voltage),
+                       "score": None if sc is None else float(sc),
+                       "flag": None if fl is None else bool(fl)})
+    n_scored = sum(1 for p in series if p["flag"] is not None)
+    m = score.load(int(node))
+    return jsonify({
+        "node": node, "trial_id": trial, "started": t0.isoformat(), "rows": len(series),
+        "duration_s": series[-1]["t_s"], "scored_rows": n_scored,
+        "flagged_rows": sum(1 for p in series if p["flag"]),
+        "first_alert_s": first_alert_s, "threshold": float(m["thr"]),
+        "percentile": m["pct"], "persist": score.PERSIST,
+        "detector_error": detector_error, "series": series})
+
+
+@app.route("/api/export.csv")
+def export_csv():
+    """Download readings as CSV. Filters: node (1, 2 or all), trial_id, label, start and end (YYYY-MM-DD)."""
+    where, args = [], []
+    node = request.args.get("node", "all")
+    if node != "all":
+        if node not in NODES:
+            return jsonify({"error": "node must be 1, 2 or all"}), 400
+        where.append("node_id::text = %s")
+        args.append(node)
+    trial = request.args.get("trial_id", "")
+    if trial:
+        if not TRIAL_RE.match(trial):
+            return jsonify({"error": "invalid trial_id"}), 400
+        where.append("trial_id = %s")
+        args.append(trial)
+    label = request.args.get("label", "")
+    if label:
+        if label not in LABELS:
+            return jsonify({"error": f"label must be one of {LABELS}"}), 400
+        where.append("label = %s")
+        args.append(label)
+    start, end = request.args.get("start", ""), request.args.get("end", "")
+    if start:
+        if not DATE_RE.match(start):
+            return jsonify({"error": "start must be YYYY-MM-DD"}), 400
+        where.append("timestamp >= %s::date")
+        args.append(start)
+    if end:
+        if not DATE_RE.match(end):
+            return jsonify({"error": "end must be YYYY-MM-DD"}), 400
+        where.append("timestamp < (%s::date + 1)")
+        args.append(end)
+    sql = ("SELECT reading_id, node_id, timestamp, water_level_cm, flow_rate_lpm, mq4_voltage, "
+           "mq135_voltage, label, trial_id FROM sensor_readings"
+           + (" WHERE " + " AND ".join(where) if where else "")
+           + " ORDER BY timestamp, node_id")
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["reading_id", "node_id", "timestamp", "water_level_cm", "flow_rate_lpm",
+                "mq4_voltage", "mq135_voltage", "label", "trial_id"])
+    with db() as c, c.cursor() as cur:
+        cur.execute(sql, args)
+        for row in cur.fetchall():
+            w.writerow(row)
+    name = "drainage_readings" + (f"_{trial}" if trial else "") + ".csv"
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename={name}"})
 
 def parse_target(body):
     target = str(body.get("node_id", ""))

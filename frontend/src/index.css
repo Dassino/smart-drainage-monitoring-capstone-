@@ -107,6 +107,23 @@ h1, h2, h3, p { margin: 0; }
 .more { font-size: 13px; font-weight: 600; color: var(--navy); text-decoration: none; }
 .more:hover { text-decoration: underline; }
 
+/* reports */
+.filters { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+input[type='date'] { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); }
+.btn { font: inherit; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--navy); cursor: pointer; text-decoration: none; display: inline-block; }
+.btn:hover { background: var(--bg); }
+.btn.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+.btn.primary:hover { opacity: .9; }
+.scroll { overflow-x: auto; }
+.ttable { font-size: 14px; }
+.ttable tr.sel { background: var(--blue-100); }
+.ttable .actions { white-space: nowrap; }
+.mini-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.mini { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.mini .k { font-size: 12px; color: var(--muted); }
+.mini .v { font-size: 17px; font-weight: 700; margin-top: 2px; }
+
 /* chart controls */
 .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -124,5 +141,5 @@ select { font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid va
   .sidebar { position: static; height: auto; }
   .nav { flex-direction: row; flex-wrap: wrap; }
   .main { padding: 20px 16px 40px; }
-  .tiles, .split, .nodes, .pair { grid-template-columns: 1fr; }
+  .tiles, .split, .nodes, .pair, .mini-tiles { grid-template-columns: 1fr; }
 }
