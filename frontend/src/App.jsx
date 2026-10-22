@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import Placeholder from './pages/Placeholder'
+import Alerts from './pages/Alerts'
 
 export default function App() {
   return (
@@ -10,10 +11,7 @@ export default function App() {
       <main className="main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route
-            path="/alerts"
-            element={<Placeholder title="Active Alerts" note="Alerts raised by the anomaly detector will be listed here." />}
-          />
+          <Route path="/alerts" element={<Alerts />} />
           <Route
             path="/reports"
             element={<Placeholder title="Historical Reports" note="Report filters and CSV downloads will be built here." />}
