@@ -35,6 +35,10 @@ ONLINE_S = 25      # readings arrive every ~10 s
 STALE_S = 60
 TRIAL_RE = re.compile(r"^[A-Za-z0-9_\-]{1,40}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+EVENT_TYPES = ["onset", "critical", "end"]   # event starts, critical level reached, event ends
+GAP_S = 60         # a pause longer than this between readings is a recording gap
+MERGE_S = 60       # alerts that restart within this many seconds count as one incident
+
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
@@ -55,6 +59,15 @@ def ensure_tables():
             )""")
         for n in NODES:
             cur.execute("INSERT INTO node_labels (node_id) VALUES (%s) ON CONFLICT DO NOTHING", (n,))
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS trial_events (
+            event_id    SERIAL PRIMARY KEY,
+            node_id     VARCHAR(10)  NOT NULL,          -- '1', '2' or 'both'
+            trial_id    VARCHAR(50)  NOT NULL,
+            event_type  VARCHAR(20)  NOT NULL,          -- onset, critical or end
+            occurred_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+            note        VARCHAR(200)
+        )""")
 
 
 def num(v):
@@ -230,9 +243,17 @@ def trials():
     return jsonify(out)
 
 
+def rec_position(times, rec, t):
+    """Position of time t on the recording clock (gaps removed)."""
+    k = times.searchsorted(t, side="right") - 1
+    if k < 0:
+        return 0.0
+    return rec[k] + min((t - times[k]).total_seconds(), GAP_S)
+
+
 @app.route("/api/trial")
 def trial_replay():
-    """All readings of one trial on one node, with the anomaly score of each scored reading."""
+    """One trial on one node: readings, detector score, alert episodes and logged events."""
     node = request.args.get("node", "")
     trial = request.args.get("trial_id", "")
     if node not in NODES or not TRIAL_RE.match(trial):
@@ -244,39 +265,164 @@ def trial_replay():
             WHERE node_id::text = %s AND trial_id = %s
             ORDER BY timestamp LIMIT 30000""", (node, trial))
         rows = cur.fetchall()
+        cur.execute("""
+            SELECT event_id, event_type, occurred_at, note FROM trial_events
+            WHERE trial_id = %s AND node_id IN (%s, 'both') ORDER BY occurred_at""", (trial, node))
+        event_rows = cur.fetchall()
     if not rows:
         return jsonify({"error": "no readings for that trial"}), 404
     df = pd.DataFrame(rows)
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-    t0 = df["timestamp"].iloc[0]
+    times = pd.DatetimeIndex(df["timestamp"])
+    t0 = times[0]
     scored, detector_error = {}, None
     try:
         s = score.score_frame(int(node), df)
         scored = {t: (sc, fl) for t, sc, fl in zip(s["timestamp"], s["score"], s["flag"])}
     except Exception as e:
         detector_error = str(e)
-    series, streak, first_alert_s = [], 0, None
+
+    series, rec_list, gaps = [], [], []
+    rec, prev = 0.0, None
+    streak, episodes, open_ep, run_start = 0, [], None, 0.0
     for r in df.itertuples():
+        if prev is not None:
+            dt = (r.timestamp - prev).total_seconds()
+            if dt <= GAP_S:
+                rec += dt
+            else:
+                gaps.append(rec)
+                streak = 0
+                if open_ep is not None:
+                    open_ep["end_s"] = rec
+                    open_ep = None
+        prev = r.timestamp
+        rec_list.append(rec)
         sc, fl = scored.get(r.timestamp, (None, None))
-        t_s = (r.timestamp - t0).total_seconds()
         if fl is not None:
-            streak = streak + 1 if fl else 0
-            if streak >= score.PERSIST and first_alert_s is None:
-                first_alert_s = t_s
-        series.append({"t_s": t_s, "water": num(r.water_level_cm), "flow": num(r.flow_rate_lpm),
+                if fl:
+                    streak += 1
+                    if streak == 1:
+                        run_start = rec
+                    if streak == score.PERSIST:
+                        open_ep = {"start_s": rec, "run_start_s": run_start, "end_s": rec}
+                        episodes.append(open_ep)
+                elif streak > score.PERSIST and open_ep is not None:
+                    open_ep["end_s"] = rec
+                else:
+                    streak = 0
+                    open_ep = None
+        series.append({"rec_s": rec, "water": num(r.water_level_cm), "flow": num(r.flow_rate_lpm),
                        "mq4": num(r.mq4_voltage), "mq135": num(r.mq135_voltage),
                        "score": None if sc is None else float(sc),
                        "flag": None if fl is None else bool(fl)})
-    n_scored = sum(1 for p in series if p["flag"] is not None)
+
+        merged = []
+        for ep in episodes:
+            if merged and ep["run_start_s"] - merged[-1]["end_s"] <= MERGE_S:
+                merged[-1]["end_s"] = ep["end_s"]
+            else:
+                merged.append(dict(ep))
+        episodes = merged
+
+    events = []
+    for e in event_rows:
+        t = pd.Timestamp(e["occurred_at"]).tz_convert("UTC")
+        events.append({"event_id": e["event_id"], "type": e["event_type"], "note": e["note"],
+                       "rec_s": rec_position(times, rec_list, t), "at": t.isoformat()})
+    onset = next((e for e in events if e["type"] == "onset"), None)
+    critical = next((e for e in events if e["type"] == "critical"), None)
+    detection_delay_s = lead_time_s = None
+    false_before_onset = None
+    if onset is not None:
+        false_before_onset = sum(1 for ep in episodes if ep["end_s"] < onset["rec_s"])
+        hit = next((ep for ep in episodes if ep["end_s"] >= onset["rec_s"]), None)
+        if hit is not None:
+            detection_delay_s = max(0.0, hit["start_s"] - onset["rec_s"])
+            if critical is not None:
+                lead_time_s = critical["rec_s"] - max(hit["start_s"], onset["rec_s"])
     m = score.load(int(node))
     return jsonify({
         "node": node, "trial_id": trial, "started": t0.isoformat(), "rows": len(series),
-        "duration_s": series[-1]["t_s"], "scored_rows": n_scored,
+        "recording_s": rec, "wall_s": (times[-1] - t0).total_seconds(), "gaps": gaps,
+        "scored_rows": sum(1 for p in series if p["flag"] is not None),
         "flagged_rows": sum(1 for p in series if p["flag"]),
-        "first_alert_s": first_alert_s, "threshold": float(m["thr"]),
-        "percentile": m["pct"], "persist": score.PERSIST,
+        "episodes": episodes,
+        "alerts_per_hour": (len(episodes) / (rec / 3600)) if rec > 0 else None,
+        "events": events, "false_alerts_before_onset": false_before_onset,
+        "detection_delay_s": detection_delay_s, "lead_time_s": lead_time_s,
+        "threshold": float(m["thr"]), "percentile": m["pct"], "persist": score.PERSIST,
         "detector_error": detector_error, "series": series})
 
+
+@app.route("/api/event", methods=["POST"])
+def add_event():
+    """Log a trial event (event starts, critical level reached, event ends) at the current time."""
+    body = request.get_json(force=True, silent=True) or {}
+    node = str(body.get("node_id", ""))
+    trial = str(body.get("trial_id", "")).strip()
+    etype = body.get("type")
+    note = str(body.get("note", ""))[:200]
+    if node not in NODES + ["both"]:
+        return jsonify({"error": "node_id must be 1, 2 or both"}), 400
+    if not TRIAL_RE.match(trial):
+        return jsonify({"error": "trial_id: 1-40 letters, digits, _ or -"}), 400
+    if etype not in EVENT_TYPES:
+        return jsonify({"error": f"type must be one of {EVENT_TYPES}"}), 400
+    try:
+        ago = int(body.get("seconds_ago", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "seconds_ago must be a whole number"}), 400
+    if not 0 <= ago <= 900:
+        return jsonify({"error": "seconds_ago must be 0 to 900"}), 400
+    with db() as c, c.cursor() as cur:
+        cur.execute("""INSERT INTO trial_events (node_id, trial_id, event_type, occurred_at, note)
+                       VALUES (%s, %s, %s, NOW() - make_interval(secs => %s), %s)
+                       RETURNING event_id""", (node, trial, etype, ago, note))
+        eid = cur.fetchone()[0]
+    return jsonify({"ok": True, "event_id": eid})
+
+
+@app.route("/api/events")
+def list_events():
+    """Most recent logged events, newest first. Optional filter: trial_id."""
+    trial = request.args.get("trial_id", "")
+    where, args = "", []
+    if trial:
+        if not TRIAL_RE.match(trial):
+            return jsonify({"error": "invalid trial_id"}), 400
+        where, args = "WHERE trial_id = %s", [trial]
+    with db() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(f"""SELECT event_id, node_id, trial_id, event_type, note, occurred_at,
+                               EXTRACT(EPOCH FROM (NOW() - occurred_at)) AS age_s
+                        FROM trial_events {where} ORDER BY occurred_at DESC LIMIT 20""", args)
+        out = [{**r, "occurred_at": r["occurred_at"].isoformat(), "age_s": float(r["age_s"])}
+               for r in cur.fetchall()]
+    return jsonify(out)
+
+
+@app.route("/api/event/<int:event_id>", methods=["DELETE"])
+def delete_event(event_id):
+    with db() as c, c.cursor() as cur:
+        cur.execute("DELETE FROM trial_events WHERE event_id = %s", (event_id,))
+        deleted = cur.rowcount
+    return jsonify({"ok": True, "deleted": deleted})
+
+
+@app.route("/api/model_info")
+def model_info():
+    """Settings of the saved Isolation Forest models (System Administration screen)."""
+    out = {}
+    for n in NODES:
+        try:
+            m = score.load(int(n))
+            out[n] = {"percentile": m["pct"], "threshold": float(m["thr"]), "window": m["window"],
+                      "features": m["feats"], "trees": m["model"].n_estimators,
+                      "trained_rows": int(m["scaler"].n_samples_seen_), "persist": score.PERSIST,
+                      "file": f"iforest_final_node{n}.joblib"}
+        except Exception as e:
+            out[n] = {"error": str(e)}
+    return jsonify(out)
 
 @app.route("/api/export.csv")
 def export_csv():

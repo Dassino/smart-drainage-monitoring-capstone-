@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
-import Placeholder from './pages/Placeholder'
+import Admin from './pages/Admin'
 import Alerts from './pages/Alerts'
 import Reports from './pages/Reports'
 
@@ -14,10 +14,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/reports" element={<Reports />} />
-          <Route
-            path="/admin"
-            element={<Placeholder title="System Administration" note="Alert thresholds, sensor nodes and model configuration will be shown here." />}
-          />
+          <Route path="/admin" element={<Admin />} />
         </Routes>
       </main>
     </div>

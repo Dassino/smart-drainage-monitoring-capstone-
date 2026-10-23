@@ -36,8 +36,9 @@ function Replay({ node, trial }) {
     return () => { alive = false }
   }, [node, trial])
 
-  const metrics = Object.entries(METRICS).filter(([, m]) => !m.node1Only || node === '1')
+    const metrics = Object.entries(METRICS).filter(([, m]) => !m.node1Only || node === '1')
   const pct = data && data.scored_rows ? ((100 * data.flagged_rows) / data.scored_rows).toFixed(1) : null
+  const hasOnset = data?.events?.some((e) => e.type === 'onset')
 
   return (
     <section className="card chart-card">
@@ -60,16 +61,46 @@ function Replay({ node, trial }) {
           <>
             <div className="mini-tiles">
               <div className="mini">
-                <div className="k">Readings · duration</div>
-                <div className="v">{data.rows} · {fmtDur(data.duration_s)}</div>
+                <div className="k">Recording</div>
+                <div className="v">{data.rows} readings · {fmtDur(data.recording_s)}</div>
+                {data.gaps.length > 0 && (
+                  <div className="k">over {fmtDur(data.wall_s)} ({data.gaps.length} gap{data.gaps.length > 1 ? 's' : ''} removed)</div>
+                )}
               </div>
               <div className="mini">
-                <div className="k">Flagged by the detector</div>
+                <div className="k">Flagged readings</div>
                 <div className="v">{data.flagged_rows} of {data.scored_rows} ({pct ?? '—'}%)</div>
               </div>
               <div className="mini">
-                <div className="k">First alert ({data.persist} flagged in a row)</div>
-                <div className="v">{data.first_alert_s == null ? 'None' : `${mmss(data.first_alert_s)} after start`}</div>
+                <div className="k">Alerts ({data.persist} flagged in a row)</div>
+                <div className="v">
+                  {data.episodes.length}
+                  {data.alerts_per_hour != null && ` · ${data.alerts_per_hour.toFixed(2)} per hour`}
+                </div>
+              </div>
+              <div className="mini">
+                <div className="k">Against logged events</div>
+                {data.events.length === 0 ? (
+                  <div className="v">None logged</div>
+                ) : !hasOnset ? (
+                  <div className="v">No “event starts” logged</div>
+                ) : (
+                  <>
+                    <div className="v">
+                      {data.detection_delay_s == null ? 'Alert missed' : `Alert ${mmss(data.detection_delay_s)} after start`}
+                    </div>
+                    {data.lead_time_s != null && (
+                      <div className="k">
+                        {data.lead_time_s >= 0
+                          ? `${mmss(data.lead_time_s)} before critical level`
+                          : `${mmss(-data.lead_time_s)} after critical level`}
+                      </div>
+                    )}
+                    {data.false_alerts_before_onset > 0 && (
+                      <div className="k">{data.false_alerts_before_onset} false alert(s) before the event</div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
             {data.detector_error && <p className="empty">Detector error: {data.detector_error}</p>}
@@ -77,7 +108,9 @@ function Replay({ node, trial }) {
               series={data.series}
               metric={metric}
               threshold={data.threshold}
-              firstAlertS={data.first_alert_s}
+              episodes={data.episodes}
+              events={data.events}
+              gaps={data.gaps}
               color={COLORS[node]}
             />
           </>
