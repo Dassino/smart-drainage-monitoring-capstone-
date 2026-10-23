@@ -37,6 +37,8 @@ TRIAL_RE = re.compile(r"^[A-Za-z0-9_\-]{1,40}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 EVENT_TYPES = ["onset", "critical", "end"]   # event starts, critical level reached, event ends
 GAP_S = 60         # a pause longer than this between readings is a recording gap
+MERGE_S = 60       # alerts that restart within this many seconds count as one incident
+
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
@@ -282,7 +284,7 @@ def trial_replay():
 
     series, rec_list, gaps = [], [], []
     rec, prev = 0.0, None
-    streak, episodes, open_ep = 0, [], None
+    streak, episodes, open_ep, run_start = 0, [], None, 0.0
     for r in df.itertuples():
         if prev is not None:
             dt = (r.timestamp - prev).total_seconds()
@@ -298,20 +300,30 @@ def trial_replay():
         rec_list.append(rec)
         sc, fl = scored.get(r.timestamp, (None, None))
         if fl is not None:
-            if fl:
-                streak += 1
-                if streak == score.PERSIST:
-                    open_ep = {"start_s": rec, "end_s": rec}
-                    episodes.append(open_ep)
+                if fl:
+                    streak += 1
+                    if streak == 1:
+                        run_start = rec
+                    if streak == score.PERSIST:
+                        open_ep = {"start_s": rec, "run_start_s": run_start, "end_s": rec}
+                        episodes.append(open_ep)
                 elif streak > score.PERSIST and open_ep is not None:
                     open_ep["end_s"] = rec
-            else:
-                streak = 0
-                open_ep = None
+                else:
+                    streak = 0
+                    open_ep = None
         series.append({"rec_s": rec, "water": num(r.water_level_cm), "flow": num(r.flow_rate_lpm),
                        "mq4": num(r.mq4_voltage), "mq135": num(r.mq135_voltage),
                        "score": None if sc is None else float(sc),
                        "flag": None if fl is None else bool(fl)})
+
+        merged = []
+        for ep in episodes:
+            if merged and ep["run_start_s"] - merged[-1]["end_s"] <= MERGE_S:
+                merged[-1]["end_s"] = ep["end_s"]
+            else:
+                merged.append(dict(ep))
+        episodes = merged
 
     events = []
     for e in event_rows:
