@@ -11,7 +11,9 @@ Run from the repo root, giving every Normal export (old and new) and the new D_f
   --floor-new N1 N2   empty-channel sensor reading at the NEW mounting, node 1 then node 2 (cm)
   --floor-old N1 N2   same for the OLD mounting (default: d_floor_old in ml/mounting.json, else 22.67 22.67)
   --change-at TIME    when the new mounting starts. Default: the first reading of baseline_d3_check.
-  --exclude IDS       trial IDs left out (default: setup_d3 pilot_01)
+  --exclude IDS       extra trial IDs to leave out
+  --exclude-prefix P  every trial whose ID starts with one of these is left out
+                      (default: setup pilot rest, so setup_d3, pilot_01, pilot_02, rest_d3 ... never train)
   --activate          also write ml/mounting.json in depth mode, so the dashboard uses the new models
 
 The CSV files must contain Normal rows only (the script stops if it sees another label).
@@ -43,7 +45,8 @@ def main():
     ap.add_argument("--floor-new", nargs=2, type=float, required=True, metavar=("N1", "N2"))
     ap.add_argument("--floor-old", nargs=2, type=float, metavar=("N1", "N2"))
     ap.add_argument("--change-at")
-    ap.add_argument("--exclude", nargs="*", default=["setup_d3", "pilot_01"])
+    ap.add_argument("--exclude", nargs="*", default=[])
+    ap.add_argument("--exclude-prefix", nargs="*", default=["setup", "pilot", "rest"])
     ap.add_argument("--activate", action="store_true")
     a = ap.parse_args()
 
@@ -53,7 +56,10 @@ def main():
     if "label" in df and (df["label"].dropna() != "Normal").any():
         bad = sorted(df.loc[df["label"] != "Normal", "label"].dropna().unique())
         sys.exit(f"These files contain labels other than Normal: {bad}. Export Normal rows only.")
-    df = df[~df["trial_id"].isin(a.exclude)]
+    skip = df["trial_id"].isin(a.exclude) | df["trial_id"].str.startswith(tuple(a.exclude_prefix))
+    if skip.any():
+        print("Left out:", ", ".join(f"{t} ({n} rows)" for t, n in df.loc[skip, "trial_id"].value_counts().items()))
+    df = df[~skip]
     df = df.drop_duplicates(subset=["node_id", "timestamp"])
 
     if a.change_at:
