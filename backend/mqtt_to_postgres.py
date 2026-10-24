@@ -24,7 +24,7 @@ MQTT_TOPIC = "drainage/+/readings"
 
 DB_NAME = os.environ.get("DB_NAME", "drainage_monitoring")
 DB_USER = os.environ.get("DB_USER", "postgres")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "killstar")
 DB_HOST = os.environ.get("DB_HOST", "localhost")
 DB_PORT = os.environ.get("DB_PORT", "5432")
 
