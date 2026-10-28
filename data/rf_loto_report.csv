@@ -1,0 +1,11 @@
+trial,true,event_rows,correct,called_normal,pre_rows,pre_normal,alert_class,delay_min,lead_min
+blockage_01,Blockage,56,0.75,0.25,4,0.75,Blockage,3.0,-0.0
+blockage_02,Blockage,45,0.71,0.2,0,,Blockage,2.7,0.4
+blockage_03,Blockage,103,0.64,0.35,7,0.57,Blockage,0.4,9.6
+blockage_04,Blockage,88,0.9,0.1,3,1.0,Blockage,1.5,5.5
+blockage_05,Blockage,80,0.91,0.09,137,0.77,Blockage,1.2,4.4
+flood_01,Flood,85,0.96,0.04,3,1.0,Flood,1.2,3.9
+flood_02,Flood,62,0.92,0.08,0,,Flood,2.2,2.5
+flood_03,Flood,62,0.53,0.47,0,,Flood,7.2,-2.3
+flood_04,Flood,86,0.72,0.2,369,1.0,Flood,0.9,5.2
+flood_05,Flood,91,0.98,0.02,19,0.26,Flood,1.5,4.7
