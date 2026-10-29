@@ -1,0 +1,11 @@
+trial,true,false_alerts_before_onset,stage1_delay_min,stage1_lead_min,class_given,rf_only_lead_min,rf_only_false_alerts
+blockage_01,Blockage,0,,,,-0.0,0
+blockage_02,Blockage,0,,,,0.4,0
+blockage_03,Blockage,0,,,,9.6,0
+blockage_04,Blockage,0,,,,5.5,0
+blockage_05,Blockage,2,0.7,5.0,Blockage,4.4,1
+flood_01,Flood,0,0.8,4.3,Flood,3.9,0
+flood_02,Flood,0,,,,2.5,0
+flood_03,Flood,1,1.2,3.8,Unclear,-2.3,0
+flood_04,Flood,0,0.6,5.4,Flood,5.2,0
+flood_05,Flood,1,,,,4.7,1

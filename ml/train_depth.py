@@ -14,6 +14,10 @@ Run from the repo root, giving every Normal export (old and new) and the new D_f
   --exclude IDS       extra trial IDs to leave out
   --exclude-prefix P  every trial whose ID starts with one of these is left out
                       (default: setup pilot rest, so setup_d3, pilot_01, pilot_02, rest_d3 ... never train)
+  --new-only          train on the new-mounting readings only (from --change-at on). Use this when the old data does not
+                      match the new channel set-up (different noise, different Normal depth while water is flowing)
+  --pct P1 P2         alarm-threshold percentile of the training scores for node 1 and node 2 (default: the old
+                      models' 99 and 95). A lower percentile alerts more readily: more detections, more false alerts.
   --activate          also write ml/mounting.json in depth mode, so the dashboard uses the new models
 
 The CSV files must contain Normal rows only (the script stops if it sees another label).
@@ -47,6 +51,8 @@ def main():
     ap.add_argument("--change-at")
     ap.add_argument("--exclude", nargs="*", default=[])
     ap.add_argument("--exclude-prefix", nargs="*", default=["setup", "pilot", "rest"])
+    ap.add_argument("--new-only", action="store_true")
+    ap.add_argument("--pct", nargs=2, type=float, metavar=("P1", "P2"))
     ap.add_argument("--activate", action="store_true")
     a = ap.parse_args()
 
@@ -83,23 +89,28 @@ def main():
         old = joblib.load(HERE / "models" / OLD_MODEL.format(node))
         raw = df[df.node_id == node]
         before = raw[raw.timestamp < cfg["change_at"]]
+        if a.new_only:
+            raw = raw[raw.timestamp >= cfg["change_at"]]
+            print(f"node {node}: --new-only, {len(raw)} new-mounting readings"
+                  + ("  (few: aim for 2000+)" if len(raw) < 1500 else ""))
         if len(before):
             p99 = before["water_level_cm"].where(before["water_level_cm"].between(0, 100)).quantile(0.99)
             print(f"node {node}: old-mounting distance, 99th percentile {p99:.2f} cm (D_floor old {floor_old[node - 1]})")
         d, feats = score.make_features(score.clean(raw, node, depth=cfg), score.sensors(node, "depth_cm"),
                                        old["window"], level="depth_cm")
+        pct = a.pct[node - 1] if a.pct else old["pct"]
         scaler = StandardScaler().fit(d[feats])
         X = scaler.transform(d[feats])
         model = clone(old["model"]).fit(X)
         s = -model.score_samples(X)
-        thr = float(np.percentile(s, old["pct"]))
+        thr = float(np.percentile(s, pct))
         flag = s > thr
         after = (d["timestamp"] >= cfg["change_at"]).to_numpy()
         print(f"node {node}: trained on {len(d)} rows ({after.sum()} at the new mounting), "
-              f"threshold p{old['pct']} = {thr:.4f}, flagged {flag.mean():.2%} overall, "
+              f"threshold p{pct:g} = {thr:.4f}, flagged {flag.mean():.2%} overall, "
               f"{flag[~after].mean() if (~after).any() else float('nan'):.2%} old mounting, "
               f"{flag[after].mean() if after.any() else float('nan'):.2%} new mounting")
-        joblib.dump({"scaler": scaler, "model": model, "thr": thr, "feats": feats, "pct": old["pct"],
+        joblib.dump({"scaler": scaler, "model": model, "thr": thr, "feats": feats, "pct": pct,
                      "window": old["window"], "trials": sorted(d["trial_id"].unique().tolist()),
                      "d_floor_old": floor_old[node - 1], "d_floor_new": a.floor_new[node - 1],
                      "change_at": str(cfg["change_at"])},

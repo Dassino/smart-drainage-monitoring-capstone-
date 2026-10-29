@@ -22,6 +22,7 @@ import pandas as pd
 from flask import Flask, Response, jsonify, request, send_from_directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ml"))
 import score  # noqa: E402
+import stage2  # noqa: E402
 
 DB_NAME = os.environ.get("DB_NAME", "drainage_monitoring")
 DB_USER = os.environ.get("DB_USER", "postgres")
@@ -191,7 +192,7 @@ def anomaly():
             age = float(rows[0]["age_s"])
             res["age_s"] = age
             res["trial_id"] = rows[0]["trial_id"]
-            if age > STALE_S and res["status"] != "error":
+            if age > STALE_S and res["status"] not in ("error", "paused"):
                 res["status"] = "no_live_data"
             out[n] = res
     return jsonify(out)
@@ -219,9 +220,33 @@ def anomaly_detail():
     res["series"] = [p for p in res["series"] if p["age_s"] is None or p["age_s"] <= minutes * 60]
     res["age_s"] = float(rows[0]["age_s"])
     res["trial_id"] = rows[0]["trial_id"]
-    if res["age_s"] > STALE_S and res["status"] != "error":
+    if res["age_s"] > STALE_S and res["status"] not in ("error", "paused"):
         res["status"] = "no_live_data"
     return jsonify(res)
+
+
+@app.route("/api/diagnosis")
+def diagnosis():
+    """Stage 2 (Random Forest): names the problem (Blockage or Flood) from both nodes together."""
+    rows = {}
+    with db() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        for n in NODES:
+            rows[n] = latest_trial_rows(cur, n, stage2.FETCH_ROWS)
+    if not rows["1"] or not rows["2"]:
+        return jsonify({"status": "no_data"})
+    age = max(float(rows[n][0]["age_s"]) for n in NODES)
+    try:
+        res = stage2.score_latest(pd.DataFrame(rows["1"]), pd.DataFrame(rows["2"]))
+    except FileNotFoundError:
+        res = {"status": "no_model", "detail": "ml/models/rf_stage2.joblib not found. Run ml/train_rf.py."}
+    except Exception as e:      # keep the dashboard alive if scoring fails
+        res = {"status": "error", "detail": str(e)}
+    res["age_s"] = age
+    res["trial_id"] = rows["1"][0]["trial_id"]
+    if age > STALE_S and res["status"] not in ("error", "paused", "no_model"):
+        res["status"] = "no_live_data"
+    return jsonify(res)
+
 
 @app.route("/api/trials")
 def trials():
@@ -317,13 +342,13 @@ def trial_replay():
                        "score": None if sc is None else float(sc),
                        "flag": None if fl is None else bool(fl)})
 
-        merged = []
-        for ep in episodes:
-            if merged and ep["run_start_s"] - merged[-1]["end_s"] <= MERGE_S:
-                merged[-1]["end_s"] = ep["end_s"]
-            else:
-                merged.append(dict(ep))
-        episodes = merged
+    merged = []
+    for ep in episodes:
+        if merged and ep["run_start_s"] - merged[-1]["end_s"] <= MERGE_S:
+            merged[-1]["end_s"] = ep["end_s"]
+        else:
+            merged.append(dict(ep))
+    episodes = merged
 
     events = []
     for e in event_rows:
@@ -419,7 +444,7 @@ def model_info():
             out[n] = {"percentile": m["pct"], "threshold": float(m["thr"]), "window": m["window"],
                       "features": m["feats"], "trees": m["model"].n_estimators,
                       "trained_rows": int(m["scaler"].n_samples_seen_), "persist": score.PERSIST,
-                      "file": f"iforest_final_node{n}.joblib"}
+                      "file": score.model_file(n), "mode": score.MODE}
         except Exception as e:
             out[n] = {"error": str(e)}
     return jsonify(out)

@@ -29,7 +29,27 @@ const DETECTOR = {
   warming_up: ['off', 'Warming up'],
   no_live_data: ['off', 'No live data'],
   no_data: ['off', 'No data'],
+  paused: ['off', 'Paused: new mounting'],
   error: ['crit', 'Detector error'],
+}
+
+const DIAG = {
+  paused: ['off', 'Paused: new mounting'],
+  warming_up: ['off', 'Warming up'],
+  no_live_data: ['off', 'No live data'],
+  no_data: ['off', 'No data'],
+  no_model: ['off', 'Model not trained'],
+  error: ['crit', 'Diagnosis error'],
+}
+
+function diagBadge(d) {
+  if (!d) return ['off', '—']
+  if (d.status === 'ok') {
+    if (d.alert) return ['crit', `Alert: ${d.class ?? d.label}`]
+    if (d.label && d.label !== 'Normal') return ['stale', `Possible ${d.label.toLowerCase()}`]
+    return ['ok', 'Normal']
+  }
+  return DIAG[d.status] ?? ['off', '—']
 }
 
 function Reading({ k, v, u }) {
@@ -74,6 +94,8 @@ function NodeCard({ id, s }) {
 export default function Dashboard() {
   const { data: status, error } = usePolling('/api/status', 3000)
   const { data: anomaly } = usePolling('/api/anomaly', 3000)
+  const { data: diag } = usePolling('/api/diagnosis', 3000)
+  const [dcls, dtext] = diagBadge(diag)
   const [metric, setMetric] = useState('water')
   const [minutes, setMinutes] = useState(15)
 
@@ -150,9 +172,17 @@ export default function Dashboard() {
                   </li>
                 )
               })}
+              <li>
+                <div className="line">
+                  <span>Diagnosis, both nodes</span>
+                  <span className={`badge ${dcls}`}>{dtext}</span>
+                </div>
+                {diag?.status === 'error' && <span className="muted small">{diag.detail}</span>}
+              </li>
             </ul>
             <p className="muted small foot">
-              Isolation Forest, one model per node. An alert needs {anomaly?.['1']?.persist ?? 6} flagged readings in a row.
+              Isolation Forest, one model per node. A Random Forest reads both nodes together and names the problem
+              (Blockage or Flood). An alert needs {anomaly?.['1']?.persist ?? 6} flagged readings in a row.
             </p>
           </div>
         </div>
