@@ -12,10 +12,12 @@ const STATUS = {
   warming_up: ['off', 'Warming up'],
   no_live_data: ['off', 'No live data'],
   no_data: ['off', 'No data'],
+  paused: ['off', 'Paused: new mounting'],
   error: ['crit', 'Detector error'],
 }
 
 const SENSOR = {
+  depth_cm: ['Water depth', 'cm'],
   water_level_cm: ['Distance to surface', 'cm'],
   flow_rate_lpm: ['Flow', 'L/min'],
   mq4_voltage: ['MQ-4', 'V'],
@@ -31,6 +33,46 @@ function featureLabel(name) {
 }
 
 const fmt = (v, d = 2) => (v == null ? '—' : Number(v).toFixed(d))
+
+const DIAG = {
+  paused: 'The detector is paused while the sensors are remounted.',
+  warming_up: 'Needs about 4 minutes of readings from both nodes in the current trial before it can diagnose.',
+  no_live_data: 'No live readings.',
+  no_data: 'No data.',
+  no_model: 'The Random Forest has not been trained yet (run ml/train_rf.py).',
+}
+
+function Diagnosis() {
+  const { data, error } = usePolling('/api/diagnosis', 5000)
+  const ok = data?.status === 'ok'
+  const [cls, text] = !ok
+    ? ['off', 'No diagnosis']
+    : data.alert
+      ? ['crit', `Alert: ${data.class ?? data.label}`]
+      : data.label !== 'Normal'
+        ? ['stale', `Possible ${data.label.toLowerCase()}`]
+        : ['ok', 'Normal']
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Diagnosis, both nodes</h2>
+        <span className={`badge ${cls}`}>{text}</span>
+      </div>
+      <div className="card-body">
+        {error && <p className="empty">Could not load the diagnosis ({error})</p>}
+        {data?.status === 'error' && <p className="empty">{data.detail}</p>}
+        {data && !ok && data.status !== 'error' && <p className="empty">{DIAG[data.status] ?? data.status}</p>}
+        {ok && (
+          <p className="muted small">
+            Random Forest on node 1 and node 2 together. Latest reading:{' '}
+            {Object.entries(data.proba).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(' · ')} ·{' '}
+            {data.streak} not Normal in a row (alert at {data.persist}) · trial <b>{data.trial_id}</b>
+          </p>
+        )}
+      </div>
+    </section>
+  )
+}
 
 function NodeAlert({ id, minutes }) {
   const { data, error } = usePolling(`/api/anomaly/detail?node=${id}&minutes=${minutes}`, 5000)
@@ -108,6 +150,7 @@ export default function Alerts() {
           <option value={180}>Last 3 hours</option>
         </select>
       </div>
+      <Diagnosis />
       <section className="row pair">
         {NODES.map((n) => (
           <NodeAlert key={n} id={n} minutes={minutes} />
