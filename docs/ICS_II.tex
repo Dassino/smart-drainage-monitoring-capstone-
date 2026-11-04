@@ -429,6 +429,7 @@ In terms of machine learning scope, the study implemented a three-stage pipeline
 
 The system was developed with ESP32 microcontrollers, MQTT and web technologies, and the study did not explore other hardware platforms or communication protocols. The prototype was limited to two sensor nodes in one channel model, which was enough to validate the core functionality of the system.
 
+
 \clearpage
 \section{Literature Review}
 \subsection{Introduction}
@@ -603,6 +604,7 @@ The system processing layer represents the analytical core of the system and ope
 The output layer represents the information products delivered to system users through a web-based monitoring dashboard. Outputs include real-time drainage condition displays, early flood warning alerts with estimated time to critical threshold, blockage location alerts identifying the section of drainage channel where a flow rate discrepancy has been detected between two consecutive monitoring nodes, gas hazard alerts when harmful gas concentrations exceed safe thresholds, and historical analytical reports that support longer-term drainage planning and maintenance scheduling.
 
 The actors in this framework are county authorities and disaster management agencies, who receive the system's outputs through the web-based dashboard and alert notifications. These actors are responsible for interpreting the system's alerts and reports, deploying maintenance teams to identified blockage locations, issuing public warnings when flood risk alerts are generated, and responding to gas hazard alerts by dispatching appropriate safety personnel. The feedback loop from these actors back to the system represents the maintenance actions and calibration updates that result from field investigations, which in turn improve the accuracy of the system's baseline models and classification thresholds over time.
+
 \clearpage
 \section{Development Methodology}
 \label{sec:ch3}
@@ -948,6 +950,7 @@ FR-17 & The system shall raise gas hazard alerts when a gas reading exceeds a sa
 \caption{Functional requirements}\label{tab:fr}\\
 \end{longtable}
 
+\clearpage
 \subsubsection{Non-Functional Requirements}
 
 \begin{longtable}{|p{1.4cm}|p{5.3cm}|p{2.4cm}|p{1.5cm}|p{2.6cm}|}
@@ -982,7 +985,6 @@ NFR-10 & The prototype shall run on one Windows laptop using open-source softwar
 \caption{Non-functional requirements}\label{tab:nfr}\\
 \end{longtable}
 
-\clearpage
 \subsubsection{Data Requirements}
 
 \begin{longtable}{|p{1.4cm}|p{9.4cm}|p{2.5cm}|}
@@ -1011,7 +1013,6 @@ DR-07 & All readings shall be kept in the database and can be exported as CSV. N
 \caption{Data requirements}\label{tab:dr}\\
 \end{longtable}
 
-\clearpage
 \subsubsection{Interface and Integration Requirements}
 
 \begin{longtable}{|p{1.4cm}|p{9.4cm}|p{2.5cm}|}
@@ -1058,6 +1059,7 @@ v (evaluation) & FR-11, NFR-01 to NFR-05, NFR-07, IR-03 & Use case diagram, wire
 \label{tab:trace}
 \end{table}
 
+\clearpage
 \subsection{System Analysis Diagrams}
 \label{sec:analysis-diagrams}
 
@@ -1078,6 +1080,8 @@ Figure~\ref{fig:use_case_diagram} shows the system as the original design define
 
 \subsection{System Design Diagrams}
 \label{sec:design-diagrams}
+
+The diagrams in this section were drawn before implementation, and they keep the labels of the original design, for example the class names Blockage Risk and Flood Risk, and gas concentrations in ppm. The prototype uses the class names Blockage and Flood and stores gas voltages, and the other differences between the figures and the system as built are listed in Table~\ref{tab:design-changes}.
 
 \subsubsection{System Architecture}
 
@@ -1137,7 +1141,6 @@ An entity relationship diagram represents the entities of the data model, their 
 
 Figure~\ref{fig:erd_diagram} is the data model of the original design. The central entity is \texttt{SensorReading}, which every later stage depends on. The relationships that connect alerts to nodes, users and model versions support accountability: it is possible to say which reading, which node and which model produced a warning, and who responded.
 
-\clearpage
 \subsubsection{Logical Database Schema}
 
 The logical schema lists the tables, their keys and their relationships. Figure~\ref{fig:database_schema} shows the six tables of the full design: \texttt{sensor\_nodes}, \texttt{sensor\_readings}, \texttt{alerts}, \texttt{users}, \texttt{reports} and \texttt{model\_configurations}. The \texttt{alerts} table has a foreign key to \texttt{model\_configurations}, so every alert is traceable to a model version, and the readings are linked to nodes through a foreign key and an index on the node and the timestamp, which serves the time-ordered queries of the dashboard.
@@ -1659,12 +1662,13 @@ Alert, User and Report tables & Tables sensor\_readings, node\_labels and trial\
 \label{tab:deviations}
 \end{table}
 
+\clearpage
 \subsection{Version Control and Implementation Evidence}
 \label{sec:vcs}
 
 \subsubsection{Repository Setup and Access}
 
-The project used Git for version control and GitHub to host its repository, \texttt{Dassino/smart-\allowbreak drainage-\allowbreak monitoring-\allowbreak capstone-} (the \emph{Project repository}). The repository is \textbf{[CONFIRM: private or public]}, and the supervisor, Mr.~Ouma Kelvin, \textbf{[CONFIRM: invited as a collaborator, with the date]}. Figure~\ref{fig:repo-overview} shows the repository overview and its main folders.
+The project used Git for version control and GitHub to host its repository, \texttt{Dassino/smart-\allowbreak drainage-\allowbreak monitoring-\allowbreak capstone-} (the \emph{Project repository}). The repository is public, so the supervisor, Mr.~Ouma Kelvin, could open it through the link labelled \emph{Project repository}. Figure~\ref{fig:repo-overview} shows the repository overview and its main folders.
 
 \begin{figure}[H]
 \centering
@@ -1675,7 +1679,7 @@ The project used Git for version control and GitHub to host its repository, \tex
 
 \subsubsection{Task Planning and Tracking}
 
-Open work was recorded as GitHub issues. Issue~\#6 tracked the Normal-condition baseline recording, of which about 23 of the 48 planned hours were completed, and Issue~\#8 tracked the gas calibration data, which was not collected. Figure~\ref{fig:issues} shows the issues and their status at the time of writing.
+Planned work was recorded as GitHub issues, 29 in all, grouped under phase milestones such as Phase~3: Physical Build, Phase~5: ML Model Training and Phase~6: Testing \& Evaluation. Issue~\#6 tracked the Normal-condition baseline recording, of which about 23 of the 48 planned hours were completed, and Issue~\#8 tracked the gas calibration data, which was not collected. Figure~\ref{fig:issues} shows the issues and their status at the time of writing.
 
 \begin{figure}[H]
 \centering
@@ -1721,7 +1725,7 @@ The branch \texttt{feat/two-stage-pipeline} was put forward for merging into \te
 
 The code was organised by responsibility: \texttt{backend} held the bridge, the dashboard interface and the labelling script; \texttt{ml} held the data preparation, training and evaluation scripts and the saved models; \texttt{frontend} held the React dashboard; \texttt{data} held the exports and the labelled datasets; and \texttt{docs} held the evidence and figures. The \texttt{README.md} described the setup, run order and evaluation scripts. A \texttt{.gitignore} file excluded the real \texttt{secrets.h}, local environment files and generated caches, and \texttt{secrets.h.example} listed the required names with placeholders.
 
-Earlier commits had contained hard-coded credentials, namely the database password and the hotspot details. Removing them from the current files was not enough, because they remain in the history. They were therefore replaced by environment variables and placeholders, and the database password and the hotspot name and password were changed \textbf{[CONFIRM: date]}, which makes the exposed values useless. The history was not rewritten.
+Earlier commits had contained hard-coded credentials, namely the database password and the hotspot details. Removing them from the current files was not enough, because they remain in the history. They were therefore replaced by environment variables and placeholders. The history was not rewritten, and the exposed database password and hotspot details were not changed. The database runs only on the development laptop and the hotspot is a private network used in the laboratory, but the values remain visible in a public repository, so this is recorded as a known risk and as a limitation.
 
 \subsubsection{Hosting and Deployment}
 
