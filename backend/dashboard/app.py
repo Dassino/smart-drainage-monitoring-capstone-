@@ -43,6 +43,9 @@ MERGE_S = 60       # alerts that restart within this many seconds count as one i
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
+import security  # noqa: E402  (admin key, security headers, audit log)
+security.init_security(app)
+
 
 def db():
     return psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD,
@@ -240,6 +243,32 @@ def diagnosis():
     except FileNotFoundError:
         res = {"status": "no_model", "detail": "ml/models/rf_stage2.joblib not found. Run ml/train_rf.py."}
     except Exception as e:      # keep the dashboard alive if scoring fails
+        res = {"status": "error", "detail": str(e)}
+    res["age_s"] = age
+    res["trial_id"] = rows["1"][0]["trial_id"]
+    if age > STALE_S and res["status"] not in ("error", "paused", "no_model"):
+        res["status"] = "no_live_data"
+    return jsonify(res)
+
+
+@app.route("/api/forecast")
+def forecast():
+    """Stage 3 (LSTM): depth of node 1 five minutes ahead and the time left before the Critical depth."""
+    rows = {}
+    with db() as c, c.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        for n in NODES:
+            rows[n] = latest_trial_rows(cur, n, stage2.FETCH_ROWS)
+    if not rows["1"] or not rows["2"]:
+        return jsonify({"status": "no_data"})
+    age = max(float(rows[n][0]["age_s"]) for n in NODES)
+    try:
+        import lstm_live        # imported here so the dashboard still starts if PyTorch is missing
+        res = lstm_live.forecast_latest(pd.DataFrame(rows["1"]), pd.DataFrame(rows["2"]))
+    except FileNotFoundError:
+        res = {"status": "no_model", "detail": "ml/models/lstm_forecast.pt not found. Run ml/train_lstm_forecast.py ... --rf-input."}
+    except ImportError as e:
+        res = {"status": "error", "detail": f"PyTorch is not installed: {e}"}
+    except Exception as e:      # keep the dashboard alive if forecasting fails
         res = {"status": "error", "detail": str(e)}
     res["age_s"] = age
     res["trial_id"] = rows["1"][0]["trial_id"]
