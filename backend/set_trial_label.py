@@ -29,7 +29,7 @@ def main():
     trial, label = sys.argv[1], sys.argv[2]
     con = psycopg2.connect(dbname=os.environ.get("DB_NAME", "drainage_monitoring"),
                            user=os.environ.get("DB_USER", "postgres"),
-                           password=os.environ.get("DB_PASSWORD", "killstar"),
+                           password=os.environ.get("DB_PASSWORD", ""),
                            host=os.environ.get("DB_HOST", "localhost"),
                            port=os.environ.get("DB_PORT", "5432"))
     with con, con.cursor() as cur:

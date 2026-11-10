@@ -1,3 +1,12 @@
 secrets.h
 __pycache__/
 .ipynb_checkpoints/
+backend/dashboard/audit.log
+
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.env
+secrets.h
+backend/dashboard/audit.log

@@ -31,6 +31,7 @@
 \usepackage{url}
 \usepackage{longtable}
 
+\usepackage{xcolor}
 \usepackage{hyperref}
 \hypersetup{
     colorlinks = true,
@@ -109,6 +110,13 @@
 
 % \renewcommand{\cftsec}{}
 
+% Items still to be filled in are printed in red as [ ... ]; slots for screenshots print a red box until the image file exists in Images/.
+\newcommand{\pending}[1]{\textcolor{red}{\textbf{[#1]}}}
+\newcommand{\evfig}[4]{%
+\begin{figure}[H]\centering
+\IfFileExists{Images/#1}{\includegraphics[width=#2\textwidth]{Images/#1}}{\fbox{\parbox{0.85\textwidth}{\centering\vspace{28pt}\textcolor{red}{\textbf{Insert screenshot: \detokenize{Images/#1}}}\vspace{28pt}}}}
+\caption{#3}\label{#4}
+\end{figure}}
 \begin{document}
 \justifying
 \begin{center}
@@ -171,9 +179,9 @@ Finally, I acknowledge the contributions of the researchers and authors whose pu
 
 Urban flooding remains a critical challenge in Nairobi, Kenya, where inadequate drainage infrastructure, reactive management practices, and the absence of real-time monitoring continue to cause loss of life and destruction of property. This study presents the design, development and evaluation of a Smart Drainage Monitoring and Flood Prediction System, built as a hardware-software prototype of two IoT sensor nodes, a machine-learning pipeline and a web-based monitoring dashboard.
 
-Two ESP32 nodes, each with an ultrasonic water-level sensor, a flow sensor and MQ-series gas sensors, sent their readings over MQTT to a laptop, where they were stored in PostgreSQL. A three-stage machine-learning pipeline was developed. An Isolation Forest flagged deviations from a Normal baseline, a Random Forest classified the state of the drain as Normal, Blockage or Flood and raised the alert, and an LSTM was evaluated as a forecaster of the water level and the time to the Critical level. The data were recorded on the prototype: a Normal baseline of about 23 hours and ten staged trials, five of Blockage and five of Flood. The models were evaluated with leave-one-trial-out validation. The study followed a mixed exploratory and experimental research paradigm, with CRISP-DM for the pipeline and Agile Scrum for development.
+Two ESP32 nodes, each with an ultrasonic water-level sensor, a flow sensor and MQ-series gas sensors, sent their readings over MQTT to a laptop, where they were stored in PostgreSQL. A three-stage machine-learning pipeline was developed. An Isolation Forest flagged deviations from a Normal baseline, a Random Forest classified the state of the drain as Normal, Blockage or Flood and raised the alert, and an LSTM forecaster of the water level and the time to the Critical level was evaluated and is shown on the dashboard as an experimental indicator. The data were recorded on the prototype: a Normal baseline of about 23 hours and ten staged trials, five of Blockage and five of Flood. The models were evaluated with leave-one-trial-out validation. The study followed a mixed exploratory and experimental research paradigm, with CRISP-DM for the pipeline and Agile Scrum for development.
 
-The Random Forest detected all ten trials and named the correct class in all ten, classifying 81\% of the readings during events correctly, which met the 80\% target narrowly. It warned at least five minutes before the Critical level on three of the ten trials, with a median lead time of 4.2 minutes; five minutes was physically possible on only six trials. The Isolation Forest alone detected four trials and raised four false alerts, and the LSTM forecaster did not do better than simple baselines. The results show the technical feasibility of low-cost drain monitoring under controlled conditions, and they do not show performance on a live Nairobi drain.
+The Random Forest detected all ten trials and named the correct class in all ten, classifying 81\% of the readings during events correctly, which met the 80\% target narrowly. It warned at least five minutes before the Critical level on three of the ten trials, with a median lead time of 4.2 minutes; five minutes was physically possible on only six trials. The Isolation Forest alone detected four trials and raised four false alerts, and the LSTM forecaster did not do better than simple baselines. The hypothesis was therefore only partially supported: the classification target was met, but the five-minute warning target was met in three of the ten trials. The system was a locally deployed laboratory prototype and was not hosted publicly. The results show the technical feasibility of low-cost drain monitoring under controlled conditions, and they do not show performance on a live Nairobi drain.
 
 \clearpage
 
@@ -806,7 +814,7 @@ Sensor integration connected the sensors and checked that their readings reached
 
 \subsubsection{Machine Learning Model Development}
 
-The Isolation Forest was trained first, on the Normal baseline, followed by the Random Forest on the labelled trials and then the LSTM on sequences of readings. The Isolation Forest and the Random Forest were connected to the backend so that stored readings are scored for the dashboard. The LSTM was evaluated offline and was not connected to the dashboard.
+The Isolation Forest was trained first, on the Normal baseline, followed by the Random Forest on the labelled trials and then the LSTM on sequences of readings. The Isolation Forest and the Random Forest were connected to the backend so that stored readings are scored for the dashboard. The LSTM forecaster was evaluated offline and was later connected to the dashboard as an experimental forecast (Section~\ref{sec:dashboard}).
 
 \subsubsection{Coding and Development}
 
@@ -875,7 +883,7 @@ This module was intended to compare gas readings with safety thresholds for meth
 
 \subsubsection{Machine Learning Prediction Module}
 
-This module applies the pipeline to the stored readings. The Isolation Forest and the Random Forest run for the dashboard, and the Random Forest raises the alert. The LSTM forecaster was evaluated offline and was not connected to the dashboard.
+This module applies the pipeline to the stored readings. The Isolation Forest and the Random Forest run for the dashboard, and the Random Forest raises the alert. The LSTM forecaster is also run on the newest readings and shown on the dashboard as an experimental forecast; it does not raise the alert or sound the siren.
 
 \subsubsection{Alert and Notification Module}
 
@@ -931,7 +939,7 @@ FR-08 & The system shall raise an alert only after the classifier has predicted 
 \hline
 FR-09 & The dashboard shall display the alert state, the predicted class and the Stage~1 flag for each node. & Must & Obj.~iv & Demonstration \\
 \hline
-FR-10 & Stage~3 (LSTM) shall estimate the water level and the time to Critical a few minutes ahead of the current reading. & Could & Obj.~iv & Offline evaluation against baselines \\
+FR-10 & Stage~3 (LSTM) shall estimate the water level and the time to Critical a few minutes ahead of the current reading. & Could & Obj.~iv & Evaluation against baselines; live display TC-09 \\
 \hline
 FR-11 & The dashboard shall replay a stored trial with its readings, detector output and logged events, and shall export readings as a CSV file. & Should & Obj.~v & Demonstration \\
 \hline
@@ -968,7 +976,7 @@ NFR-02 & The system shall warn at least 5 minutes before the Critical level, on 
 \hline
 NFR-03 & Alerts raised before an event starts shall be counted and reported; the aim is none during Normal operation. & Model quality & Should & Evaluation; live Normal run \\
 \hline
-NFR-04 & The dashboard shall refresh its data every 3 seconds, and the delay between a reading arriving and being displayed shall be measured and reported. & Performance & Should & Measurement (planned) \\
+NFR-04 & The dashboard shall refresh its data every 3 seconds, and the delay between a reading arriving and being displayed shall be measured and reported. & Performance & Should & Measurement, TC-12 \\
 \hline
 NFR-05 & When the database is unavailable, the bridge shall retry every 5 seconds and resume without a restart; when the backend is unavailable, the dashboard shall report that the interface cannot be reached and recover when it restarts. & Reliability & Must & Tests TC-04, TC-05 \\
 \hline
@@ -1028,7 +1036,7 @@ IR-01 & Each node shall publish its readings as JSON messages over Wi-Fi to the 
 \hline
 IR-02 & The bridge shall subscribe to the readings topic and insert each message into the database, retrying when the database cannot be reached. & Test TC-04 \\
 \hline
-IR-03 & The Flask interface shall serve readings, detector output, trials and model settings to the dashboard as JSON, and shall return an error message for an invalid node or trial identifier. & Test (planned) \\
+IR-03 & The Flask interface shall serve readings, detector output, trials and model settings to the dashboard as JSON, and shall return an error message for an invalid node or trial identifier. & Test, TC-13 \\
 \hline
 IR-04 & The dashboard shall be used in a web browser and shall have four screens: monitoring, active alerts, historical reports and system administration. & Demonstration \\
 \hline
@@ -1039,7 +1047,7 @@ IR-05 & The ultrasonic echo, the flow signal and the gas outputs shall be reduce
 
 \subsubsection{Requirements Traceability}
 
-Table~\ref{tab:trace} links the requirements to the objectives, to the design artefacts of this chapter and to the evidence in Chapter~5. Test cases TC-01 to TC-07 are those of Table~\ref{tab:iot-tests}; tests marked \emph{planned} were not run at the time of writing.
+Table~\ref{tab:trace} links the requirements to the objectives, to the design artefacts of this chapter and to the evidence in Chapter~5. Test cases TC-01 to TC-13 are those of Table~\ref{tab:iot-tests}; a test that was not completed is reported as such and is not counted as passed.
 
 \begin{table}[H]
 \centering
@@ -1113,7 +1121,7 @@ An IoT and machine-learning system is described by the way its data move as well
     \label{fig:data_pipeline}
 \end{figure}
 
-Figure~\ref{fig:data_pipeline} shows three points. First, the Random Forest is the main alert: it classifies the state, and the alert is raised after 6 consecutive non-Normal predictions (FR-08). Second, the Isolation Forest receives the same features and is displayed beside the diagnosis as a second opinion, but it does not stop a reading from reaching the Random Forest, because a design that used it as a gate missed trials that the Random Forest alone detected (Chapter~5). Third, the LSTM is on the offline path only: it was trained and evaluated as a forecaster but is not connected to the live dashboard. The dotted lines show that the saved models are produced offline and loaded by the live stages.
+Figure~\ref{fig:data_pipeline} shows three points. First, the Random Forest is the main alert: it classifies the state, and the alert is raised after 6 consecutive non-Normal predictions (FR-08). Second, the Isolation Forest receives the same features and is displayed beside the diagnosis as a second opinion, but it does not stop a reading from reaching the Random Forest, because a design that used it as a gate missed trials that the Random Forest alone detected (Chapter~5). Third, the LSTM forecaster was trained and evaluated offline, and its saved model is also loaded by the backend to show a five-minute forecast beside the diagnosis; it does not raise the alert. The dotted lines show that the saved models are produced offline and loaded by the live stages.
 
 \subsubsection{Class Diagram}
 
@@ -1226,9 +1234,9 @@ Table~\ref{tab:design-changes} lists where the system as built differs from the 
 \textbf{Item} & \textbf{Original design} & \textbf{As built} & \textbf{Reason} \\
 \hline
 \endhead
-Pipeline roles & Isolation Forest, then Random Forest, then LSTM in sequence & Random Forest is the main alert; Isolation Forest runs beside it; LSTM is offline & A gate that used the Isolation Forest detected 4 of 10 trials against 10 of 10 for the Random Forest alone \\
+Pipeline roles & Isolation Forest, then Random Forest, then LSTM in sequence & Random Forest is the main alert; Isolation Forest runs beside it; LSTM forecast is shown as an experimental indicator and does not alert & A gate that used the Isolation Forest detected 4 of 10 trials against 10 of 10 for the Random Forest alone \\
 \hline
-Stage 3 & LSTM predicts the water level 5 minutes ahead and feeds the alerts & LSTM forecaster evaluated offline, not connected to the dashboard & It did not beat simple baselines on ten short trials \\
+Stage 3 & LSTM predicts the water level 5 minutes ahead and feeds the alerts & LSTM forecaster evaluated offline, then shown on the dashboard as an experimental forecast that does not raise alerts & It did not beat simple baselines on ten short trials \\
 \hline
 Gas sensing & Methane, hydrogen sulfide and ammonia concentrations in ppm & Voltages of an MQ-4 (both nodes) and an MQ-135 (node~1) & The sensors were not calibrated, and no dedicated hydrogen sulphide sensor was used \\
 \hline
@@ -1265,7 +1273,7 @@ Material deviations from the approved design are recorded where they occur and a
 \subsection{Implementation Environment}
 \label{sec:environment}
 
-The prototype was developed, trained and tested on a single Windows laptop that also acted as the wireless access point, the message broker, the database server and the dashboard server. It was a controlled laboratory prototype and was not deployed for public access.
+The prototype was developed, trained and tested on a single Windows laptop that also acted as the wireless access point, the message broker, the database server and the dashboard server. It was a controlled laboratory prototype, deployed locally on this laptop, and it was not hosted or made accessible to the public. The dashboard and the interface listen only on the laptop itself (\texttt{127.0.0.1}).
 
 \subsubsection{Hardware and Deployment Environment}
 
@@ -1366,14 +1374,14 @@ Frontend & Node.js; npm; React; Vite & 22.16.0; 10.9.2; 19; 8.3.5 & Monitoring d
 \label{tab:env-sw}
 \end{table}
 
-The database password is not stored in the repository. The backend, the bridge and the labelling script read it from the environment variable \texttt{DB\_PASSWORD} and prompt for it when the variable is not set. Wi-Fi details for the nodes are kept in a \texttt{secrets.h} file that is excluded from version control, and a \texttt{secrets.h.example} file with placeholders documents the required names.
+The database password is not stored in the repository. The backend, the bridge and the labelling script read it from the environment variable \texttt{DB\_PASSWORD}, and the backend refuses to connect when the variable is empty. The administration key of Section~\ref{sec:dashboard} is read from \texttt{DASH\_ADMIN\_KEY}. Wi-Fi details for the nodes are kept in a \texttt{secrets.h} file that is excluded from version control, and a \texttt{secrets.h.example} file with placeholders documents the required names.
 
 \subsubsection{Deployment and Reproducibility}
 
 \begin{sloppypar}
-The system was run as follows. The repository was cloned and the Python and Node dependencies installed. PostgreSQL was started and the database \texttt{drainage\_monitoring} created; the backend creates its tables on first start. Mosquitto was started and the hotspot enabled. The bridge (\texttt{mqtt\_to\_postgres.py}), the backend (\texttt{backend/dashboard/app.py}) and the frontend (\texttt{npm run dev}) were then started, each prompting for or reading the database password. The route \texttt{/api/status} served as the health check: when the backend was stopped the dashboard displayed ``Cannot reach the API'', and it recovered when the backend was restarted.
+The system was run as follows. The repository was cloned and the Python and Node dependencies installed. PostgreSQL was started and the database \texttt{drainage\_monitoring} created; the backend creates its tables on first start. Mosquitto was started and the hotspot enabled. The bridge (\texttt{mqtt\_to\_postgres.py}), the backend (\texttt{backend/dashboard/app.py}) and the frontend (\texttt{npm run dev}) were then started, each reading the database password from the environment (and the backend also reading the administration key). The route \texttt{/api/status} served as the health check: when the backend was stopped the dashboard displayed ``Cannot reach the API'', and it recovered when the backend was restarted.
 
-The models were stored in \texttt{ml/models}, and the results in this chapter can be reproduced from the labelled dataset with the scripts \texttt{ml/train\_rf.py}, \texttt{ml/eval\_pipeline.py}, \texttt{ml/train\_lstm.py} and \texttt{ml/train\_lstm\_forecast.py}; their logs are in \texttt{docs/evidence/logs}. The environment needs no paid service and no internet connection once the software is installed.
+The models were stored in \texttt{ml/models}, and the results in this chapter can be reproduced from the labelled dataset with the scripts \texttt{ml/train\_rf.py}, \texttt{ml/eval\_pipeline.py}, \texttt{ml/train\_lstm.py} and \texttt{ml/train\_lstm\_forecast.py}; their logs are in \texttt{docs/evidence/logs}. The environment needs no paid service and no internet connection once the software is installed. The README lists the setup, the run order and the environment variables. The final version of the repository was marked with a release tag, \pending{state the tag, for example v1.0, after creating it}. The system was run as a locally deployed prototype and is not a publicly accessible service.
 \end{sloppypar}
 
 \subsection{Hardware, Firmware and Integration}
@@ -1427,6 +1435,8 @@ MQ-135 analogue output (node~1) & GPIO~35 & Analogue input behind a divider \\
 \label{tab:pins}
 \end{table}
 
+The floor distances above were the ones used to train the models. On 8 November 2026 the dry channel was recorded again (trial \texttt{rest\_d3}, 205 readings at node~1 and 206 at node~2). The median distances were 45.69~cm and 45.46~cm, with standard deviations of 0.027~cm and 0.007~cm (Table~\ref{tab:iot-tests}, TC-02). The dashboard's depth estimate was set to these values so that a dry channel reads about 0~cm. The difference from the training values is 0.07~cm at node~1 and 0.34~cm at node~2, which is small against the critical depth of about 3~cm, but the models were not retrained, and this is recorded as a limitation. \pending{Confirm that the backend floor values were changed to match, or state that only the dashboard display uses them.}
+
 The mounting was changed once during testing. After the first recordings, the sensors were remounted on 24 October 2026 to improve the readings, and the depth models were retrained on data from the new mounting only (Section~\ref{sec:dataset}).
 
 \subsubsection{Firmware and Data Acquisition}
@@ -1441,7 +1451,7 @@ Two failures occurred during testing and showed how the system behaves. When Pos
 
 \subsubsection{Component and End-to-End Testing}
 
-Table~\ref{tab:iot-tests} lists the hardware and integration tests, using the format of Section~\ref{sec:evaluation}. Rows marked ``not yet run'' or ``not yet measured'' were not completed at the time of writing and are listed so that nothing is reported without evidence.
+Table~\ref{tab:iot-tests} lists the hardware and integration tests, using the format of Section~\ref{sec:evaluation}. A test that could not be completed is reported as not completed and is not counted as passed, so that nothing is reported without evidence.
 
 \begin{table}[H]
 \centering
@@ -1452,7 +1462,7 @@ Table~\ref{tab:iot-tests} lists the hardware and integration tests, using the fo
 \hline
 TC-01 & Both nodes publish during a staged trial & Readings of both nodes stored & 2{,}439 time-aligned readings stored across ten trials. Pass \\
 \hline
-TC-02 & Dry-floor distance measured at each node & Stable distance used as the depth reference & 45.76~cm and 45.80~cm used. Repeatability not yet measured \\
+TC-02 & Dry-floor distance measured at each node, channel dry and still & Stable distance that can be used as the depth reference & 205 readings (node~1) and 206 (node~2), 8 November 2026. Median 45.69~cm and 45.46~cm; standard deviation 0.027~cm and 0.007~cm; range 45.67--45.70~cm (one spike to 45.31~cm, removed by the depth filter) and 45.43--45.48~cm. Pass; the floor distances were reset to the medians \\
 \hline
 TC-03 & Reading interval & About one reading every 8.5~s & 8.48~s between consecutive stored readings in the sample inspected. Pass \\
 \hline
@@ -1460,9 +1470,21 @@ TC-04 & Database unavailable & Bridge retries and resumes & Retried every 5~s; r
 \hline
 TC-05 & Backend stopped & Dashboard shows an error, then recovers & Error message displayed, recovered on restart. Pass \\
 \hline
-TC-06 & Node disconnected for several minutes & Dashboard marks the data as stale & Not yet run \\
+TC-06 & Node~2 disconnected for about two minutes, then reconnected & Dashboard marks the node as stale, then offline, then online again & \pending{Enter the measured result: time until Stale, time until Offline, time to recover, and the verdict} \\
 \hline
-TC-07 & Flow sensor against a measured volume & Measured and displayed flow agree & Not performed; the datasheet factor was used. Limitation \\
+TC-07 & Flow sensor against a measured volume & Measured and displayed flow agree & \pending{Enter the result if the test was run. If it was not, write: Not performed; the datasheet factor was used. Limitation, not counted as passed} \\
+\hline
+TC-08 & Data-changing request without the key, with a wrong key and with the right key & 401 without the key, 429 after five wrong keys, accepted with the right key & The backend log of 8 November 2026 shows POST requests to the labelling route refused with 401 and then with 429 after repeated attempts. \pending{Enter the result of the request with the correct key} \\
+\hline
+TC-09 & Live LSTM forecast on a dry channel & Route returns a forecast below the critical depth and no warning & The route returned status ok on 8 November 2026: depth now 0.07~cm, forecast 0.67~cm in 300~s, critical depth 3.0~cm, streak 0, no warning. The model also ran on three recorded trials without error. Pass for the live function; forecast quality is as in Table~\ref{tab:results} \\
+\hline
+TC-10 & Staged flood: alert popup and siren & Popup and siren after six abnormal readings in a row & \pending{Enter the result from the recorded flood run, with the time of onset and of the alert} \\
+\hline
+TC-11 & Staged blockage: diagnosis shown on the dashboard & Blockage probability rises and the alert is raised & \pending{Enter the result from the blockage run. If no alert was raised, state that and the probabilities that were shown} \\
+\hline
+TC-12 & Delay from reading stored to reading displayed & About 3~s or less (refresh interval) & \pending{Enter the measured delay, or state that it was not measured} \\
+\hline
+TC-13 & Invalid node or trial identifier sent to the interface & Error message, no crash & \pending{Enter the result, or state that it was not run} \\
 \hline
 \end{tabular}
 \caption{Hardware and integration test cases}
@@ -1529,10 +1551,69 @@ Two LSTM variants were implemented in PyTorch (CPU), each with one layer of 32 h
 
 \begin{itemize}
 \item \textbf{LSTM classifier.} Each window was classified as Normal, Blockage or Flood using a class-weighted cross-entropy loss. This variant was evaluated only and is not part of the dashboard.
-\item \textbf{LSTM forecaster (Stage 3 as designed).} The network predicted the change in node~1 depth five minutes ahead and the time remaining before the Critical level. Depth was smoothed with a causal median filter, and the Stage~2 class probabilities were added as inputs, as the design in Chapter~3 specified. Probabilities for training trials were obtained out-of-fold, so that no reading was scored by a forest that had seen its own trial. The final forecaster averaged three random seeds. A warning was raised when the forecast depth reached the median critical depth of the training trials for six readings in a row.
+\item \textbf{LSTM forecaster (Stage 3 as designed).} The network predicted the change in node~1 depth five minutes ahead and the time remaining before the Critical level. Depth was smoothed with a causal median filter, and the Stage~2 class probabilities were added as inputs, as the design in Chapter~3 specified. Probabilities for training trials were obtained out-of-fold, so that no reading was scored by a forest that had seen its own trial. The final forecaster averaged three random seeds. A warning was raised when the forecast depth reached the median critical depth of the training trials (3.0~cm) for six readings in a row. The saved forecaster is also loaded by the backend and applied to the newest readings of both nodes, so that the dashboard shows the forecast live (Section~\ref{sec:dashboard}); it is labelled experimental because of the offline results below.
 \end{itemize}
 
 Two simple baselines were used for comparison: ``depth stays as it is now'', and a straight-line extrapolation of the last minute.
+
+\subsection{Dashboard, Alerts and Security Implementation}
+\label{sec:dashboard}
+
+\subsubsection{Dashboard}
+
+The dashboard was built with React and Vite and served by the Flask interface of Section~\ref{sec:environment}. It has four screens: \emph{Dashboard} (titled Live Overview), \emph{Active Alerts}, \emph{Historical Reports} and \emph{System Administration}. The Live Overview polls the interface every three seconds and shows the following.
+
+\begin{itemize}
+\item \textbf{Live channel view.} A three-dimensional view of the channel with the two nodes. The water height follows the latest depth of each node, the water moves when the flow rate is above 0.1~L/min, and a dry channel stays dry. The colour changes with the diagnosis.
+\item \textbf{Node status.} A node is shown as online when its newest reading is less than 25~seconds old, as stale after 25 seconds and as offline after 60 seconds. Each node card shows the measured distance to the water surface, the flow rate, the gas voltages and, labelled as an estimate, the water depth, which is the dry-floor distance minus the measured distance. The depth is an estimate because it depends on the floor distance measured at mounting (Table~\ref{tab:iot-tests}, TC-02).
+\item \textbf{Early warning.} The Random Forest class probabilities, the number of consecutive non-Normal readings out of the six needed for an alert, the Isolation Forest status of each node, and the LSTM forecast.
+\item \textbf{Alert popup and siren.} When the Random Forest alert is raised, a popup names the condition and a siren sounds until the user acknowledges it. Browsers allow sound only after the user has clicked on the page, so the sound is enabled with one click after each page load. The LSTM forecast and the Isolation Forest do not sound the siren.
+\end{itemize}
+
+The \emph{LSTM forecast} panel shows the depth of node~1 now, the forecast depth five minutes ahead and the critical depth of 3.0~cm, with the number of consecutive readings for which the forecast was at or above that depth. The forecast is paused while the sensors are in the old mounting, and it is shown as unavailable when a node has stopped sending. The panel states that, in the offline evaluation, the forecast was no better than assuming that the level stays as it is (Section~\ref{sec:evaluation}), so that it is read as an early indication only.
+
+For interface testing the page has a demonstration mode that fills the screens with simulated data and shows a banner stating that the values are simulated. Simulated data were not used as test evidence.
+
+Figures~\ref{fig:dash-normal} to \ref{fig:dash-reports} show the screens during the staged runs.
+
+\evfig{dash_normal.png}{0.95}{Live Overview with the channel dry: both nodes online, diagnosis Normal and the LSTM forecast below the critical depth}{fig:dash-normal}
+\evfig{dash_blockage.png}{0.95}{Live Overview during the staged blockage: Blockage probability, consecutive abnormal readings and the forecast}{fig:dash-blockage}
+\evfig{dash_flood.png}{0.95}{Live Overview during the staged flood: Flood probability, consecutive abnormal readings and the forecast}{fig:dash-flood}
+\evfig{dash_popup.png}{0.8}{Flood warning popup raised by the Random Forest alert}{fig:dash-popup}
+\evfig{dash_offline.png}{0.95}{Node~2 shown as stale or offline after it was disconnected (TC-06)}{fig:dash-offline}
+\evfig{dash_reports.png}{0.95}{Historical Reports screen}{fig:dash-reports}
+
+\subsubsection{Security Measures}
+
+The prototype was designed for a private laboratory network, and light security measures were added to the dashboard interface and to the way credentials are handled. Table~\ref{tab:security} lists them. They reduce the risk of accidental or casual changes to the data. They are not a substitute for the access control and encryption that a public deployment would need.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{4.0cm}|p{6.4cm}|p{3.6cm}|}
+\hline
+\textbf{Measure} & \textbf{Implementation} & \textbf{Evidence} \\
+\hline
+Administration key & Requests that change data (setting a label, logging or deleting an event, relabelling) need the key in a request header. The key is read from \texttt{DASH\_ADMIN\_KEY}, or generated at start-up and printed in the terminal. The page asks for it once in a dialog and keeps it for the browser tab only & TC-08; Figure~\ref{fig:admin-key} \\
+\hline
+Limit on wrong keys & After five wrong keys in five minutes from one address, further attempts are refused until the period passes & TC-08; backend log \\
+\hline
+Audit log & Each data-changing request is recorded with the time, address, method, path and result, without request contents. The file is excluded from version control & Figure~\ref{fig:audit} \\
+\hline
+Response headers & Content-type sniffing and framing are disabled, referrers are not sent, and interface responses are not cached & Browser developer tools \\
+\hline
+Local access only & The interface listens on \texttt{127.0.0.1} and sends no cross-origin permissions & Start-up configuration \\
+\hline
+Credentials & The database password and the administration key come from environment variables, and the Wi-Fi details from a file that is not in the repository (Section~\ref{sec:vcs}) & Repository inspection (NFR-06) \\
+\hline
+\end{tabular}
+\caption{Security measures implemented in the prototype}
+\label{tab:security}
+\end{table}
+
+\evfig{dash_admin_key.png}{0.7}{Dialog that asks for the administration key before data can be changed}{fig:admin-key}
+\evfig{audit_log.png}{0.85}{Extract of the audit log showing refused and accepted requests}{fig:audit}
+
+The measures that were not implemented are as follows. The Mosquitto broker accepts connections without a user name or password, and messages are not encrypted, so any device on the hotspot could publish readings. The dashboard has a single shared key and no user accounts, and it uses plain HTTP on the local machine. These are recorded as limitations in Section~\ref{sec:evaluation}.
 
 \subsection{Testing and Evaluation}
 \label{sec:evaluation}
@@ -1617,6 +1698,37 @@ The Isolation Forest was less reliable because the Normal channel with flow prod
 
 The LSTM forecaster did not outperform simple baselines. The data contain ten short events that rise suddenly within three to ten minutes of the onset, and the readings before the onset carry almost no trend, so there is little to learn a forecast from. The Random Forest probabilities as inputs raised the number of warned trials from one to between three and five across runs, but the run-to-run variation (three to five trials) shows that this result is not stable. The pipeline therefore delivers an early diagnosis and warning (Stage~2) but not a reliable forecast of the water level (Stage~3 as designed).
 
+\subsubsection{Detection and Early Warning}
+
+Detection and early warning are different results. A method \emph{detects} a condition when it raises an alert and names the right class at some time after the onset. It gives an \emph{early warning} only when that alert comes before the Critical level and with enough lead time to act. The Random Forest detected all ten trials and named the class correctly in all ten, but only three of its warnings came five minutes or more before the Critical press, with a median lead time of 4.2 minutes. The first result supports the claim that the pipeline can recognise the staged conditions; the second shows that it does not yet warn early enough in most cases.
+
+The five-minute target was missed for three reasons. First, physical conditions limited the time available: in four of the ten trials the water took less than five minutes to go from the onset to the Critical level (2.93, 3.12, 4.67 and 4.94 minutes, Table~\ref{tab:critical-depth}), so a five-minute warning could not have been given in those trials. Second, the alert needs six abnormal readings in a row, about 50 seconds, which was chosen to avoid false alerts, and the readings before the onset carry almost no trend. Third, in the six trials that did allow five minutes, three warnings arrived too late or too close to the Critical press, because the early readings of a blockage or flood overlap with the flickering readings of a Normal channel with flow.
+
+The false alerts were counted before the onset of a trial. The Random Forest raised two false alerts over the ten trials and the Isolation Forest raised four. In the Normal runs, 91\% of the readings before onset were called Normal by the Random Forest. A false alert is costly in practice because it can teach operators to ignore the siren, so the six-in-a-row rule was kept even though it delays the alert.
+
+\subsubsection{Results by Objective and Outcome of the Hypothesis}
+
+Table~\ref{tab:by-objective} relates the evidence to the objectives of Chapter~1.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|p{1.2cm}|p{3.4cm}|p{4.6cm}|p{4.8cm}|}
+\hline
+\textbf{Obj.} & \textbf{Output} & \textbf{Evidence and result} & \textbf{What it permits} \\
+\hline
+iii & Two sensor nodes, broker, database and dashboard & TC-01 to TC-05 passed; TC-06 and TC-07 as reported in Table~\ref{tab:iot-tests}; dry-floor repeatability within 0.05~cm & The framework collected and stored depth, flow and gas readings from both nodes in a controlled setting \\
+\hline
+iv & Isolation Forest, Random Forest and LSTM & Random Forest 81\% correct and 10 of 10 trials detected; Isolation Forest 4 of 10; LSTM forecast equal to the baseline & Detection and classification are supported; a reliable forecast of the water level is not \\
+\hline
+v & Prototype tests against the acceptance criteria & Table~\ref{tab:acceptance}: accuracy met narrowly, lead time met in 3 of 10 trials, forecast criterion not met & The prototype is reliable enough for a controlled demonstration, not for deployment on a live drain \\
+\hline
+\end{tabular}
+\caption{Evidence for the objectives that this chapter tests}
+\label{tab:by-objective}
+\end{table}
+
+The hypothesis in Chapter~3 had two parts: a classification accuracy of at least 80\% and a warning at least five minutes before the Critical level. The first part was met narrowly (81\%). The second was met in three of ten trials, and the LSTM did not improve on the baselines. The hypothesis is therefore \emph{partially supported}: the results support it for classification, within the controlled prototype, and do not support it for the five-minute early warning.
+
 \subsubsection{Limitations}
 
 \begin{itemize}
@@ -1626,7 +1738,10 @@ The LSTM forecaster did not outperform simple baselines. The data contain ten sh
 \item Node~2 depth was unreliable while water was poured.
 \item The flow sensor works from 1 to 30~L/min, was not calibrated against a measured volume, and its readings below 1~L/min are not reliable.
 \item Critical depth was judged by eye at node~1 and varied between trials.
-\item The messaging broker ran without authentication on a private hotspot.
+\item The messaging broker ran without authentication or encryption on a private hotspot, and the dashboard uses one shared administration key and no user accounts.
+\item The depth models were trained with floor distances of 45.76 and 45.80~cm, and the dashboard later used 45.69 and 45.46~cm; the models were not retrained.
+\item The live LSTM forecast is experimental. It was not better than the baselines offline and was checked live only on a dry channel and on recorded trials.
+\item A blockage run on the live dashboard \pending{state whether the Random Forest raised an alert in the recorded blockage, and why not if it did not}.
 \item The system was deployed locally on a laptop and was not hosted publicly.
 \end{itemize}
 
@@ -1641,7 +1756,7 @@ The LSTM forecaster did not outperform simple baselines. The data contain ten sh
 \hline
 Isolation Forest flags, then Random Forest classifies & Random Forest is the main alert; Isolation Forest is shown beside it & Gating reduced detection from 10 to 4 of 10 trials \\
 \hline
-LSTM predicts water level and time to threshold & Tested as a forecaster; Random Forest provides the early warning & Forecaster did not beat simple baselines on ten short trials \\
+LSTM predicts water level and time to threshold & Tested as a forecaster and shown live as an experimental indicator; Random Forest provides the alert and the early warning & Forecaster did not beat simple baselines on ten short trials \\
 \hline
 Gas concentrations in ppm & Sensor voltages & Gas sensors were not calibrated \\
 \hline
@@ -1654,6 +1769,10 @@ Classes Blockage Risk and Flood Risk & Classes Blockage and Flood & Labels descr
 TensorFlow and Keras & PyTorch & PyTorch was available on the development computer \\
 \hline
 48-hour Normal baseline & About 23 hours plus Normal runs with flow & Time available \\
+\hline
+Wireframes of four screens & Live Overview with a three-dimensional channel view, early-warning panel and alert popup with siren & Shows the state of the channel and the model output at a glance \\
+\hline
+No security design & Administration key, request limit, audit log and response headers & Reduce accidental changes to the data (Table~\ref{tab:security}) \\
 \hline
 Alert, User and Report tables & Tables sensor\_readings, node\_labels and trial\_events & The prototype stores readings and labels; alerts are computed from them \\
 \hline
@@ -1672,7 +1791,7 @@ The project used Git for version control and GitHub to host its repository, \tex
 
 \begin{figure}[H]
 \centering
-\framebox[0.9\textwidth][c]{\rule{0pt}{3.5cm}Insert screenshot: repository overview}
+\includegraphics[width=0.8\textwidth]{Images/github_repo.png}
 \caption{Repository overview showing the name and main folders}
 \label{fig:repo-overview}
 \end{figure}
@@ -1683,7 +1802,7 @@ Planned work was recorded as GitHub issues, 29 in all, grouped under phase miles
 
 \begin{figure}[H]
 \centering
-\framebox[0.9\textwidth][c]{\rule{0pt}{3.5cm}Insert screenshot: issues list or project board}
+\includegraphics[width=0.9\textwidth]{Images/github_issues.png}
 \caption{Issues tracking the baseline recording and the gas calibration data}
 \label{fig:issues}
 \end{figure}
@@ -1694,7 +1813,7 @@ The branch \texttt{main} held integrated work, and each stage of the project was
 
 \begin{figure}[H]
 \centering
-\framebox[0.9\textwidth][c]{\rule{0pt}{3cm}Insert screenshot: branch list}
+\includegraphics[width=0.95\textwidth]{Images/github_branches.png}
 \caption{Feature branches used during development}
 \label{fig:branches}
 \end{figure}
@@ -1705,19 +1824,19 @@ Commits recorded focused changes. Early commits described the change in plain wo
 
 \begin{figure}[H]
 \centering
-\framebox[0.9\textwidth][c]{\rule{0pt}{3.5cm}Insert screenshot: commit history of feat/two-stage-pipeline}
+\includegraphics[width=0.55\textwidth]{Images/github_commits.png}
 \caption{Commit history for the two-stage pipeline and its evidence}
 \label{fig:commits}
 \end{figure}
 
 \subsubsection{Review and Integration}
 
-The branch \texttt{feat/two-stage-pipeline} was put forward for merging into \texttt{main} through a pull request \textbf{[CONFIRM: number]}. Its description summarised the added stages, stated that hard-coded credentials had been replaced by environment variables, and pointed to the evaluation logs in \texttt{docs/evidence/logs}. As the only developer, the author reviewed the changes by running the evaluation scripts on the branch before merging \textbf{[CONFIRM: merged on date; supervisor review, if any]}. Figure~\ref{fig:pr} shows the pull request.
+The branch \texttt{feat/two-stage-pipeline} was put forward for merging into \texttt{main} through pull request \#43. Its description summarised the added stages, stated that hard-coded credentials had been replaced by environment variables, and pointed to the evaluation logs in \texttt{docs/evidence/logs}. As the only developer, the author reviewed the changes by running the evaluation scripts on the branch before merging it on 4 November 2026. The pull request recorded no other reviewer. Figure~\ref{fig:pr} lists the merged pull requests, with \#43 at the top.
 
 \begin{figure}[H]
 \centering
-\framebox[0.9\textwidth][c]{\rule{0pt}{3.5cm}Insert screenshot: pull request and merge status}
-\caption{Pull request integrating the two-stage pipeline}
+\includegraphics[width=0.9\textwidth]{Images/github_pulls.png}
+\caption{Merged pull requests, including \#43, which integrated the two-stage pipeline}
 \label{fig:pr}
 \end{figure}
 
@@ -1725,7 +1844,7 @@ The branch \texttt{feat/two-stage-pipeline} was put forward for merging into \te
 
 The code was organised by responsibility: \texttt{backend} held the bridge, the dashboard interface and the labelling script; \texttt{ml} held the data preparation, training and evaluation scripts and the saved models; \texttt{frontend} held the React dashboard; \texttt{data} held the exports and the labelled datasets; and \texttt{docs} held the evidence and figures. The \texttt{README.md} described the setup, run order and evaluation scripts. A \texttt{.gitignore} file excluded the real \texttt{secrets.h}, local environment files and generated caches, and \texttt{secrets.h.example} listed the required names with placeholders.
 
-Earlier commits had contained hard-coded credentials, namely the database password and the hotspot details. Removing them from the current files was not enough, because they remain in the history. They were therefore replaced by environment variables and placeholders. The history was not rewritten, and the exposed database password and hotspot details were not changed. The database runs only on the development laptop and the hotspot is a private network used in the laboratory, but the values remain visible in a public repository, so this is recorded as a known risk and as a limitation.
+Earlier commits had contained hard-coded credentials, namely the database password and the hotspot details. Moving them to environment variables and placeholders removed them from the current files but not from the history of a public repository. The supervisor therefore advised changing them and cleaning the history. \pending{After doing this, keep the following and delete this note: The database password and the hotspot password were changed on 10 November 2026, the old values were removed from all commits with git filter-repo, and the history was force-pushed. The old values no longer work. Pull requests may keep copies of old commits on GitHub, which is why the passwords were changed and not only the history cleaned. If this was not done in time, replace this paragraph with: The exposed credentials were not changed before submission and remain a known risk.} The database runs only on the development laptop and the hotspot is a private network used in the laboratory.
 
 \subsubsection{Hosting and Deployment}
 
@@ -1735,6 +1854,52 @@ The system ran locally on the development laptop and was not hosted publicly, be
 \subsection{Author Oversight and Use of AI-Assisted Tools}
 
 Claude (Anthropic, model Claude Sonnet 5.5) was used to assist with writing and debugging code for data preparation, model training and evaluation scripts, the dashboard integration and analysis of results. Its code was run on the author's own data and its outputs were checked against the logs saved in the project repository, and its suggestions were accepted, changed or rejected by the author, who remained responsible for the work and for all claims in this report.
+
+\clearpage
+\section{Conclusions, Recommendations and Future Works}
+\label{ch:conclusions}
+
+\subsection{Introduction}
+
+This chapter answers the objectives and research questions of Chapter~1 from the evidence reported in Chapter~5. Conclusions state what the study established, recommendations propose action that follows from the findings, and future works name research that remains open. No new results are introduced.
+
+\subsection{Conclusions}
+
+Urban flooding in Nairobi is made worse by blocked drains and by monitoring that reacts after the water has risen. This study built a prototype to monitor a drain continuously and to warn of blockage and flood: two ESP32 nodes measuring water level, flow and gas voltages, a message broker and a database on a laptop, a three-stage machine-learning pipeline, and a web dashboard with an alert popup and siren. It was tested on ten staged trials on a channel model. The conclusions follow the order of the objectives.
+
+\begin{enumerate}[label=\roman*.]
+\item \textbf{Challenges of existing practice.} The literature review showed that drainage management in Kenya depends on manual inspection and on responses after flooding, with little real-time monitoring (Chapter~2). This established the need that the prototype addresses.
+\item \textbf{Existing tools and their limitations.} The review of related systems found sensing and prediction systems that either lacked a deployable low-cost design or did not report how early they warned, which is the gap that the evaluation of lead time addresses.
+\item \textbf{Sensor-based framework.} The two-node framework collected and stored depth, flow and gas readings about every 8.5 seconds and displayed them within the dashboard refresh interval. The dry-floor distance repeated within 0.05~cm at both nodes. Its recovery from database and backend outages was tested, and the tests of stale-data detection and of the flow sensor are reported in Table~\ref{tab:iot-tests} \pending{state in one line the outcome of TC-06 and TC-07}. The gas sensors and the flow sensor were not calibrated, so their readings are voltages and uncalibrated estimates.
+\item \textbf{Machine-learning pipeline.} The Random Forest detected all ten staged trials and named the correct class in all ten, with 81\% of the readings during events classified correctly. The Isolation Forest alone detected four trials and, used as a gate, reduced detection, so it is shown beside the diagnosis and does not control the alert. The LSTM forecaster did not improve on simple baselines, and it is shown on the dashboard as an experimental indicator only. The pipeline therefore supports detection and classification of the staged conditions, but not a reliable forecast of the water level.
+\item \textbf{Performance and reliability.} Against the acceptance criteria, the accuracy target was met narrowly, the correct class was given at the first alert in all trials, and the five-minute warning was given in three of ten trials with a median lead time of 4.2 minutes. Four trials reached the Critical level in less than five minutes from the onset, so a five-minute warning was not possible in them. The two Random Forest false alerts and the four of the Isolation Forest show that false alerts remain a limitation.
+\end{enumerate}
+
+\textbf{Hypothesis.} The hypothesis combined a classification accuracy of at least 80\% with a warning at least five minutes before the Critical level. The first part was met and the second was not met in most trials, so the hypothesis is partially supported.
+
+\textbf{Contribution and boundaries.} The study contributes a low-cost, locally deployed prototype with a documented dataset of ten staged trials and an honest comparison of three model types for detecting and warning of drainage conditions. The conclusions hold only for a controlled channel model with two nodes, water from a pump and a bucket, and a laptop deployment. They do not show performance on a live Nairobi drain, in rain, with debris, or over long periods.
+
+\subsection{Recommendations}
+
+The recommendations are ordered by priority.
+
+\begin{enumerate}
+\item \textbf{Essential safeguards, for anyone who builds on the prototype.} Use the system only as a laboratory or pilot aid with a person watching, and treat an alert as a prompt to inspect the drain and not as a decision. This follows from the 3-in-10 early-warning result and from the false alerts.
+\item \textbf{Before any use beyond the private network (developers and maintainers).} Add a user name, password and encryption to the message broker, replace the shared administration key with user accounts, and keep all credentials out of the repository. This follows from the open broker and the single shared key (Section~\ref{sec:dashboard}) and from the exposure of credentials in earlier commits.
+\item \textbf{Data collection (researchers and developers).} Record more staged and real events, with depth rising at different speeds, before trusting a classifier or a forecaster. This follows from the ten trials and from the unstable forecaster results, which varied between three and five warned trials across runs.
+\item \textbf{Calibration (developers).} Calibrate the flow sensor against a measured volume and the gas sensors against a reference, and measure the dry floor again after any remounting. This follows from the datasheet flow factor, the uncalibrated gas voltages and the floor change of Section~\ref{sec:hardware}.
+\item \textbf{Use of the forecast (users).} Do not rely on the LSTM forecast for decisions. It matched but did not beat the baseline that assumes the level stays as it is.
+\end{enumerate}
+
+\subsection{Future Works}
+
+\begin{enumerate}
+\item \textbf{Forecasting with more data.} The forecaster could not learn from ten short events with almost no trend before the onset. Future work could collect a larger set of events, including slow rises, and compare other forecasting methods with the same baselines and leave-one-trial-out validation.
+\item \textbf{Field trial.} Testing the nodes on a real drain would show the effect of rain, debris, temperature and power on the readings, and whether the five-minute warning can be given when the water rises more slowly than in the laboratory.
+\item \textbf{Hardware revision.} The depth of node~2 was unreliable while water was poured. A second sensor type or a different mounting could be compared with the ultrasonic sensor, and the power use and wireless range of the nodes could be measured for outdoor use.
+\item \textbf{Alert policy.} The effect of requiring fewer or more than six abnormal readings in a row could be studied with a larger Normal data set, to balance early warning against false alerts.
+\end{enumerate}
+
 
 \clearpage
 \bibliographystyle{apalike}
