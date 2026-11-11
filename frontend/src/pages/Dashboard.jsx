@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { usePolling } from '../api'
+import { useMemo, useState } from 'react'
+import ChannelScene from '../components/ChannelScene'
+import EarlyWarning from '../components/EarlyWarning'
 import TrendChart from '../components/TrendChart'
+import { useLive } from '../live/LiveContext'
+import { depthFromDistance, FLOOR_CM } from '../config'
 
 const NODES = ['1', '2']
 
@@ -22,39 +24,9 @@ function fmtAge(s) {
 
 const fmt = (v, d = 1) => (v == null ? '—' : Number(v).toFixed(d))
 
-const DETECTOR = {
-  alert: ['crit', 'Alert'],
-  anomalous: ['stale', 'Unusual reading'],
-  normal: ['ok', 'Normal'],
-  warming_up: ['off', 'Warming up'],
-  no_live_data: ['off', 'No live data'],
-  no_data: ['off', 'No data'],
-  paused: ['off', 'Paused: new mounting'],
-  error: ['crit', 'Detector error'],
-}
-
-const DIAG = {
-  paused: ['off', 'Paused: new mounting'],
-  warming_up: ['off', 'Warming up'],
-  no_live_data: ['off', 'No live data'],
-  no_data: ['off', 'No data'],
-  no_model: ['off', 'Model not trained'],
-  error: ['crit', 'Diagnosis error'],
-}
-
-function diagBadge(d) {
-  if (!d) return ['off', '—']
-  if (d.status === 'ok') {
-    if (d.alert) return ['crit', `Alert: ${d.class ?? d.label}`]
-    if (d.label && d.label !== 'Normal') return ['stale', `Possible ${d.label.toLowerCase()}`]
-    return ['ok', 'Normal']
-  }
-  return DIAG[d.status] ?? ['off', '—']
-}
-
-function Reading({ k, v, u }) {
+function Reading({ k, v, u, dim }) {
   return (
-    <div className="reading">
+    <div className={`reading ${dim ? 'dim' : ''}`}>
       <div className="k">{k}</div>
       <div className="v">
         {v}
@@ -67,23 +39,29 @@ function Reading({ k, v, u }) {
 function NodeCard({ id, s }) {
   const [cls, text] = STATE[s?.state] ?? ['off', 'Unknown']
   const l = s?.latest
+  const live = s?.state === 'ONLINE'
+  const depth = depthFromDistance(id, l?.water_level_cm)
   return (
     <div className={`node n${id}`}>
       <div className="node-head">
-        <h3>Node {id}</h3>
+        <h3>Node {id} <span className="muted small">{id === '1' ? 'upstream' : 'downstream'}</span></h3>
         <span className={`badge ${cls}`}>{text}</span>
       </div>
-      <p className="muted small">Last reading {fmtAge(s?.age_s)}</p>
+      <p className="muted small">
+        {live ? `Last reading ${fmtAge(s?.age_s)}` : `No live data. Last reading ${fmtAge(s?.age_s)}. Values below are old.`}
+      </p>
       <div className="readings">
-        <Reading k="Distance to surface" v={fmt(l?.water_level_cm)} u="cm" />
-        <Reading k="Flow" v={fmt(l?.flow_rate_lpm, 2)} u="L/min" />
-        <Reading k="MQ-4" v={fmt(l?.mq4_voltage, 3)} u="V" />
-        {id === '2' ? (
-          <Reading k="MQ-135" v="not fitted" />
-        ) : (
-          <Reading k="MQ-135" v={fmt(l?.mq135_voltage, 3)} u="V" />
-        )}
+        <Reading dim={!live} k="Distance to surface (measured)" v={fmt(l?.water_level_cm)} u="cm" />
+        <Reading dim={!live} k="Flow" v={fmt(l?.flow_rate_lpm, 2)} u="L/min" />
+        <Reading dim={!live} k="Water depth (estimate)" v={fmt(depth)} u="cm" />
+        <Reading dim={!live} k="MQ-4" v={fmt(l?.mq4_voltage, 3)} u="V" />
+        {id === '2'
+          ? <Reading k="MQ-135" v="not fitted" />
+          : <Reading dim={!live} k="MQ-135" v={fmt(l?.mq135_voltage, 3)} u="V" />}
       </div>
+      <p className="muted small foot">
+        Depth estimate = {FLOOR_CM[id]} cm (sensor to dry floor) minus the measured distance. If the sensor is remounted, measure the dry floor again.
+      </p>
       <p className="muted small foot">
         Labelled <b>{s?.set_label ?? '—'}</b> · {s?.set_trial ?? '—'}
       </p>
@@ -92,12 +70,23 @@ function NodeCard({ id, s }) {
 }
 
 export default function Dashboard() {
-  const { data: status, error } = usePolling('/api/status', 3000)
-  const { data: anomaly } = usePolling('/api/anomaly', 3000)
-  const { data: diag } = usePolling('/api/diagnosis', 3000)
-  const [dcls, dtext] = diagBadge(diag)
+  const { status, error, alert } = useLive()
   const [metric, setMetric] = useState('water')
   const [minutes, setMinutes] = useState(15)
+
+  const sceneNodes = useMemo(() => {
+    const out = {}
+    NODES.forEach((n) => {
+      const s = status?.[n]
+      out[n] = {
+        state: s?.state ?? 'NO DATA',
+        ageS: s?.age_s,
+        depth: depthFromDistance(n, s?.latest?.water_level_cm),
+        flow: s?.latest?.flow_rate_lpm ?? 0,
+      }
+    })
+    return out
+  }, [status])
 
   const online = NODES.filter((n) => status?.[n]?.state === 'ONLINE')
   const rows10 = NODES.reduce((sum, n) => sum + (status?.[n]?.rows_10min ?? 0), 0)
@@ -106,12 +95,28 @@ export default function Dashboard() {
 
   return (
     <>
-      <h1 className="page-title">System Overview</h1>
-      <p className="page-sub">Live readings from both sensor nodes. Updates every 3 seconds.</p>
+      <h1 className="page-title">Live Overview</h1>
+      <p className="page-sub">Both sensor nodes and the channel between them. Updates every 3 seconds.</p>
 
       {error && (
         <div className="banner">Cannot reach the API ({error}). Is the dashboard server (app.py) running?</div>
       )}
+
+      <section className="row hero">
+        <div className="card scene-card">
+          <div className="card-head">
+            <h2>Channel, live view</h2>
+            <span className="muted small">Drag to rotate. Water level and flow come from the latest readings.</span>
+          </div>
+          <ChannelScene nodes={sceneNodes} level={alert.level} cls={alert.cls} />
+          <div className="scene-note">
+            <p><b>How to read this.</b> The Random Forest raises the alert. The Isolation Forest shows unusual readings beside it, and the LSTM looks ahead. Both are hints.</p>
+            <p>In the offline test the LSTM level forecast was no better than assuming the level stays as it is (error 1.24 cm against 1.23 cm), so treat it as an early indication only.</p>
+            <p>Water depth is an estimate: the fixed sensor-to-floor distance minus the measured distance.</p>
+          </div>
+        </div>
+        <EarlyWarning />
+      </section>
 
       <section className="row tiles">
         <div className="tile">
@@ -135,56 +140,14 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="row split">
-        <div className="card">
-          <div className="card-head">
-            <h2>Sensor nodes</h2>
-          </div>
-          <div className="card-body nodes">
-            {NODES.map((n) => (
-              <NodeCard key={n} id={n} s={status?.[n]} />
-            ))}
-          </div>
+      <section className="card chart-card">
+        <div className="card-head">
+          <h2>Sensor nodes</h2>
         </div>
-
-        <div className="card">
-          <div className="card-head">
-            <h2>Active Alerts</h2>
-            <Link to="/alerts" className="more">Details</Link>
-          </div>
-            <div className="card-body">
-            <ul className="detector">
-              {NODES.map((n) => {
-                const a = anomaly?.[n]
-                const [cls, text] = DETECTOR[a?.status] ?? ['off', '—']
-                return (
-                  <li key={n}>
-                    <div className="line">
-                      <span>Node {n}</span>
-                      <span className={`badge ${cls}`}>{text}</span>
-                    </div>
-                    {a?.score != null && (
-                      <span className="muted small">
-                        score {fmt(a.score, 3)} · threshold {fmt(a.threshold, 3)} · {a.streak} flagged in a row
-                      </span>
-                    )}
-                    {a?.status === 'error' && <span className="muted small">{a.detail}</span>}
-                  </li>
-                )
-              })}
-              <li>
-                <div className="line">
-                  <span>Diagnosis, both nodes</span>
-                  <span className={`badge ${dcls}`}>{dtext}</span>
-                </div>
-                {diag?.status === 'error' && <span className="muted small">{diag.detail}</span>}
-              </li>
-            </ul>
-            <p className="muted small foot">
-              Isolation Forest, one model per node. A Random Forest reads both nodes together and names the problem
-              (Blockage or Flood). An alert needs {anomaly?.['1']?.persist ?? 6} flagged readings in a row.
-            </p>
-          </div>
+        <div className="card-body nodes">
+          {NODES.map((n) => (
+            <NodeCard key={n} id={n} s={status?.[n]} />
+          ))}
         </div>
       </section>
 
