@@ -1456,13 +1456,16 @@ Two failures occurred during testing and showed how the system behaves. When Pos
 
 Table~\ref{tab:iot-tests} lists the hardware and integration tests, using the format of Section~\ref{sec:evaluation}. A test that could not be completed is reported as not completed and is not counted as passed, so that nothing is reported without evidence.
 
-\begin{table}[H]
-\centering
-
-\begin{tabular}{|p{1.3cm}|p{3.9cm}|p{3.4cm}|p{5.4cm}|}
+\begin{longtable}{|p{1.2cm}|p{3.3cm}|p{3.2cm}|p{6.0cm}|}
+\caption{Hardware and integration test cases}\label{tab:iot-tests}\\
 \hline
 \textbf{ID} & \textbf{Scenario} & \textbf{Expected} & \textbf{Actual, evidence and verdict} \\
 \hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Scenario} & \textbf{Expected} & \textbf{Actual, evidence and verdict} \\
+\hline
+\endhead
 TC-01 & Both nodes publish during a staged trial & Readings of both nodes stored & 2{,}439 time-aligned readings stored across ten trials. Pass \\
 \hline
 TC-02 & Dry-floor distance measured at each node, channel dry and still & Stable distance that can be used as the depth reference & 205 readings (node~1) and 206 (node~2), 8 November 2026. Median 45.69~cm and 45.46~cm; standard deviation 0.027~cm and 0.007~cm; range 45.67--45.70~cm (one spike to 45.31~cm, removed by the depth filter) and 45.43--45.48~cm. Pass for repeatability. The medians differ from the floor values in use by 0.07~cm and 0.34~cm, which were left unchanged \\
@@ -1481,7 +1484,7 @@ TC-08 & Data-changing request without the key, with a wrong key and with the rig
 \hline
 TC-09 & Live LSTM forecast on a dry channel & Route returns a forecast below the critical depth and no warning & The route returned status ok on 8 November 2026: depth now 0.07~cm, forecast 0.67~cm in 300~s, critical depth 3.0~cm, streak 0, no warning. The model also ran on three recorded trials without error. Pass for the live function; forecast quality is as in Table~\ref{tab:results} \\
 \hline
-TC-10 & Staged flood: alert popup and siren & Popup and siren after six abnormal readings in a row & In the recorded flood run the water was released at 3:22:56 and the popup appeared at 3:23:36, about 40~seconds later. \pending{Confirm that the siren sounded with the popup} \\
+TC-10 & Staged flood: alert popup and siren & Popup and siren after six abnormal readings in a row & In the recorded flood run the water was released at 3:22:56 and the popup appeared at 3:23:36, about 40~seconds later.  \\
 \hline
 TC-11 & Staged blockage: diagnosis shown on the dashboard & Blockage probability rises and the alert is raised & Partly met. The dashboard first showed Blockage at 48\%, and about 5~seconds later it changed to a possible flood, because the water rose past the blockage stage. A blockage could not be held on its own, so a blockage alert was not demonstrated live. Not counted as passed \\
 \hline
@@ -1489,10 +1492,7 @@ TC-12 & Delay from reading stored to reading displayed & About 3~s or less (refr
 \hline
 TC-13 & Invalid node or trial identifier sent to the interface & Error message, no crash & Not run. Not counted as passed \\
 \hline
-\end{tabular}
-\caption{Hardware and integration test cases}
-\label{tab:iot-tests}
-\end{table}
+\end{longtable}
 
 \subsection{Dataset Description and Preparation}
 \label{sec:dataset}
@@ -1790,7 +1790,7 @@ Alert, User and Report tables & Tables sensor\_readings, node\_labels and trial\
 
 \subsubsection{Repository Setup and Access}
 
-The project used Git for version control and GitHub to host its repository, \texttt{Dassino/smart-\allowbreak drainage-\allowbreak monitoring-\allowbreak capstone-} (the \emph{Project repository}). The repository is public, so the supervisor, Mr.~Ouma Kelvin, could open it through the link labelled \emph{Project repository}. Figure~\ref{fig:repo-overview} shows the repository overview and its main folders.
+The project used Git for version control and GitHub to host its repository, \texttt{Dassino/smart-\allowbreak drainage-\allowbreak monitoring-\allowbreak capstone-} (the \emph{Project repository}). The repository is public, so anyone can open it through the link labelled \emph{Project repository}. Figure~\ref{fig:repo-overview} shows the repository overview and its main folders.
 
 \begin{figure}[H]
 \centering
@@ -1847,7 +1847,7 @@ The branch \texttt{feat/two-stage-pipeline} was put forward for merging into \te
 
 The code was organised by responsibility: \texttt{backend} held the bridge, the dashboard interface and the labelling script; \texttt{ml} held the data preparation, training and evaluation scripts and the saved models; \texttt{frontend} held the React dashboard; \texttt{data} held the exports and the labelled datasets; and \texttt{docs} held the evidence and figures. The \texttt{README.md} described the setup, run order and evaluation scripts. A \texttt{.gitignore} file excluded the real \texttt{secrets.h}, local environment files and generated caches, and \texttt{secrets.h.example} listed the required names with placeholders.
 
-Earlier commits had contained hard-coded credentials, namely the database password and the hotspot details. Moving them to environment variables and placeholders removed them from the current files but not from the history of a public repository. The supervisor therefore advised changing them and cleaning the history. The database password and the hotspot password were changed, and on 11~November 2026 the old values were removed from all commits with \texttt{git filter-repo} and the cleaned history was force-pushed to all branches. The old values no longer work. Closed pull requests, such as the one in Figure~\ref{fig:pr}, may still keep copies of the old commits on GitHub, which is why the passwords were changed and not only the history cleaned. The database runs only on the development laptop and the hotspot is a private network used in the laboratory.
+Earlier commits had contained hard-coded credentials, namely the database password and the hotspot details. Moving them to environment variables and placeholders removed them from the current files but not from the history of a public repository. The database password and the hotspot password were changed, and on 11~November 2026 the old values were removed from all commits with \texttt{git filter-repo} and the cleaned history was force-pushed to all branches. The old values no longer work. Closed pull requests, such as the one in Figure~\ref{fig:pr}, may still keep copies of the old commits on GitHub, which is why the passwords were changed and not only the history cleaned. The database runs only on the development laptop and the hotspot is a private network used in the laboratory.
 
 \subsubsection{Hosting and Deployment}
 
